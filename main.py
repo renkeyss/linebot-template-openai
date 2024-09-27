@@ -1,4 +1,3 @@
-
 # -*- coding: utf-8 -*-
 
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -31,7 +30,7 @@ from linebot.models import (
 )
 from dotenv import load_dotenv, find_dotenv
 
-_ = load_dotenv(find_dotenv())  # read local .env file
+load_dotenv(find_dotenv())  # read local .env file
 
 # Dictionary to store user message counts and reset times
 user_message_counts = {}
@@ -67,9 +66,11 @@ def call_openai_chat_api(user_message, is_classification=False):
             {"role": "user", "content": prompt},
         ]
     else:
+        assistant_instructions = f"Assistant: {ASSISTANT_NAME}, ID: {ASSISTANT_ID}"
+        prompt = f"{assistant_instructions}\n\nUser: {user_message}\nAssistant:"
         messages = [
             {"role": "system", "content": f"You are a helpful assistant named {ASSISTANT_NAME}."},
-            {"role": "user", "content": user_message},
+            {"role": "user", "content": prompt},
         ]
 
     response = openai.ChatCompletion.create(
@@ -88,7 +89,7 @@ def call_vector_search_api(query):
 
     return response['data'][0]['text']
 
-# Get channel_secret and channel_access_token from your environment variable
+# Get channel_secret and channel_access_token from your environment variables
 channel_secret = os.getenv('ChannelSecret', None)
 channel_access_token = os.getenv('ChannelAccessToken', None)
 if channel_secret is None:
@@ -169,7 +170,9 @@ async def handle_callback(request: Request):
             continue
 
         # Use vector store for endocrinology-related queries
-        result = call_vector_search_api(user_message)
+        vector_search_result = call_vector_search_api(user_message)
+
+        result = vector_search_result or "對不起，我無法找到相關的資訊。"
 
         # Increment user's message count
         user_message_counts[user_id]['count'] += 1
