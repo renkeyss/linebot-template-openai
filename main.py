@@ -19,6 +19,8 @@ from linebot.models import (
 from dotenv import load_dotenv, find_dotenv
 _ = load_dotenv(find_dotenv())  # read local .env file
 
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
 # Dictionary to store user message counts and reset times
 user_message_counts = {}
 
