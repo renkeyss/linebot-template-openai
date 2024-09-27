@@ -40,8 +40,11 @@ def reset_user_count(user_id):
 
 # 檢索 Vector store 的函式
 def search_vector_store(query, vector_store_id):
-    openai.api_key = os.getenv('OPENAI_API_KEY', None)
-    
+    api_key = os.getenv('OPENAI_API_KEY', None)
+    if not api_key:
+        logger.error("API key is not set")
+        return None
+
     url = f"https://api.openai.com/v1/vector_stores/{vector_store_id}/search"
     
     payload = {
@@ -49,16 +52,19 @@ def search_vector_store(query, vector_store_id):
     }
     
     headers = {
-        "Authorization": f"Bearer {openai.api_key}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
+
+    logger.info(f"Sending request to Vector store with query: {query}")
     
     response = requests.post(url, json=payload, headers=headers)
     
     if response.status_code == 200:
         return response.json()  # 假設回應返回 JSON
     else:
-        raise Exception(f"錯誤: 檢索 Vector store 失敗，HTTP 代碼：{response.status_code}, 錯誤信息：{response.text}")
+        logger.error(f"Error: Failed to search Vector store, HTTP code: {response.status_code}, error info: {response.text}")
+        return None
 
 async def call_openai_chat_api(user_message, is_classification=False):
     openai.api_key = os.getenv('OPENAI_API_KEY', None)
