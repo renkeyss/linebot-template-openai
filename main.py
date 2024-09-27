@@ -39,13 +39,13 @@ def reset_user_count(user_id):
     }
 
 # 檢索 Vector store 的函式
-def search_vector_store(query, vector_store_id):
+def search_file_store(query, file_id):
     api_key = os.getenv('OPENAI_API_KEY', None)
     if not api_key:
         logger.error("API key is not set")
         return None
 
-    url = f"https://api.openai.com/v1/vector_stores/{vs_O4EC1xmZuHy3WiSlcmklQgsR}/search"
+    url = f"https://api.openai.com/v1/files/{file_id}/search"
     
     payload = {
         "query": query,
@@ -186,13 +186,13 @@ async def handle_callback(request: Request):
             )
             continue
 
-        # 在此處調用 Vector store 檢索函式
-        vector_store_id = "vs_O4EC1xmZuHy3WiSlcmklQgsR"
+        # 在此處調用 File store 檢索函式
+        file_id = "file-BElA7yaA2ddwnGd2AoF4orX0"
         try:
-            search_result = search_vector_store(user_message, vector_store_id)
-            logger.info(f"Vector store search result: {search_result}")
+            search_result = search_file_store(user_message, file_id)
+            logger.info(f"File store search result: {search_result}")
         except Exception as e:
-            logger.error(f"Error searching vector store: {e}")
+            logger.error(f"Error searching file store: {e}")
             search_result = None
         
         if search_result and search_result.get("results"):
