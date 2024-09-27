@@ -1,13 +1,4 @@
 # -*- coding: utf-8 -*-
-# Licensed under the Apache License, Version 2.0 (the "License"); you may
-# not use this file except in compliance with the License. You may obtain
-# a copy of the License at
-# https://www.apache.org/licenses/LICENSE-2.0
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-# License for the specific language governing permissions and limitations
-# under the License.
 
 import openai
 import os
@@ -15,16 +6,10 @@ import sys
 import aiohttp
 from datetime import datetime, timedelta
 from fastapi import Request, FastAPI, HTTPException
-from linebot import (
-    AsyncLineBotApi, WebhookParser
-)
+from linebot import AsyncLineBotApi, WebhookParser
 from linebot.aiohttp_async_http_client import AiohttpAsyncHttpClient
-from linebot.exceptions import (
-    InvalidSignatureError
-)
-from linebot.models import (
-    MessageEvent, TextMessage, TextSendMessage,
-)
+from linebot.exceptions import InvalidSignatureError
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
 from dotenv import load_dotenv, find_dotenv
 from bs4 import BeautifulSoup
 
@@ -70,14 +55,14 @@ def call_openai_chat_api(user_message, is_classification=False):
 
     return response.choices[0].message['content']
 
-# Fetch and search information from the hospital website
+# Fetch and search information from the specified website
 async def search_website(url, query):
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as response:
             if response.status != 200:
                 raise HTTPException(
                     status_code=response.status,
-                    detail="Failed to fetch hospital website"
+                    detail="Failed to fetch website"
                 )
             page_content = await response.text()
 
@@ -170,33 +155,34 @@ async def handle_callback(request: Request):
             )
             continue
 
-        if user_id in user_state and user_state[user_id] == "querying_doctor":
-            del user_state[user_id]
-            search_results = await search_website("https://www1.cch.org.tw/opd/Service-e.aspx", user_message)
-            if search_results:
-                result_text = "\n".join(search_results)
-                response_text = f"以下是與您查詢的醫師門診時間表相關的資訊：\n\n{result_text}\n\n詳情請見網址：https://www1.cch.org.tw/opd/Service-e.aspx"
-            else:
-                response_text = "未能找到與您查詢的醫師門診時間表相關的資訊，請換一個醫師姓名再試。"
-            await line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text=response_text)
-            )
-            continue
+        if user_id in user_state:
+            if user_state[user_id] == "querying_doctor":
+                del user_state[user_id]
+                search_results = await search_website("https://www1.cch.org.tw/opd/Service-e.aspx", user_message)
+                if search_results:
+                    result_text = "\n".join(search_results[:5])  # limit to 5 results
+                    response_text = f"以下是與您查詢的醫師門診時間表相關的資訊：\n\n{result_text}\n\n詳情請見網址：https://www1.cch.org.tw/opd/Service-e.aspx"
+                else:
+                    response_text = "未能找到與您查詢的醫師門診時間表相關的資訊，請換一個醫師姓名再試。"
+                await line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text=response_text)
+                )
+                continue
 
-        if user_id in user_state and user_state[user_id] == "querying_education":
-            del user_state[user_id]
-            search_results = await search_website("https://www.cch.org.tw/knowledge.aspx?pID=1", user_message)
-            if search_results:
-                result_text = "\n".join(search_results)
-                response_text = f"以下是與您查詢的衛教相關的資訊：\n\n{result_text}\n\n詳情請見網址：https://www.cch.org.tw/knowledge.aspx?pID=1"
-            else:
-                response_text = "未能找到與您查詢的衛教相關的資訊，請換一個關鍵字再試。"
-            await line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text=response_text)
-            )
-            continue
+            if user_state[user_id] == "querying_education":
+                del user_state[user_id]
+                search_results = await search_website("https://www.cch.org.tw/knowledge.aspx?pID=1", user_message)
+                if search_results:
+                    result_text = "\n".join(search_results[:5])  # limit to 5 results
+                    response_text = f"以下是與您查詢的衛教相關的資訊：\n\n{result_text}\n\n詳情請見網址：https://www.cch.org.tw/knowledge.aspx?pID=1"
+                else:
+                    response_text = "未能找到與您查詢的衛教相關的資訊，請換一個關鍵字再試。"
+                await line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text=response_text)
+                )
+                continue
 
         classification_response = call_openai_chat_api(user_message, is_classification=True)
 
