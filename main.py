@@ -26,6 +26,7 @@ from linebot.models import (
     MessageEvent, TextMessage, TextSendMessage,
 )
 from dotenv import load_dotenv, find_dotenv
+from bs4 import BeautifulSoup
 
 _ = load_dotenv(find_dotenv())  # read local .env file
 
@@ -69,19 +70,27 @@ def call_openai_chat_api(user_message, is_classification=False):
 
     return response.choices[0].message['content']
 
-# Fetch the doctor schedule for the hospital (assuming the existence of an API)
-async def fetch_doctor_schedule():
-    # This is a hypothetical example. Please replace with actual API/website if exists.
-    url = "https://example.com/doctor_schedule_api"  # Replace with actual URL
+# Fetch and search information from the hospital website
+async def search_hospital_website(query):
+    url = "https://www1.cch.org.tw/opd/Service-e.aspx"
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as response:
             if response.status != 200:
                 raise HTTPException(
                     status_code=response.status,
-                    detail="Failed to fetch doctor schedule"
+                    detail="Failed to fetch hospital website"
                 )
-            data = await response.json()
-    return data
+            page_content = await response.text()
+
+    soup = BeautifulSoup(page_content, 'html.parser')
+    
+    # Assuming the relevant information is in text/plain format or within tags
+    search_results = []
+    for elem in soup.find_all(text=True):
+        if query in elem:
+            search_results.append(elem.strip())
+
+    return search_results
 
 # Get channel_secret and channel_access_token from your environment variable
 channel_secret = os.getenv('ChannelSecret', None)
@@ -151,41 +160,21 @@ async def handle_callback(request: Request):
             )
             continue
 
-        # Check if the user is asking for doctor schedule
-        if "門診" in user_message or "門診時間表" in user_message:
-            try:
-                doctor_schedule = await fetch_doctor_schedule()
-                schedule_info = "\n".join([f"{item['department']}: {item['doctors']}" for item in doctor_schedule])
-                await line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text=f"以下是彰化基督教醫院各科及醫師的門診時刻表：\n\n{schedule_info}\n\n詳情請見網址：https://example.com/doctor_schedule")
-                )
-            except Exception as e:
-                await line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text="無法取得門診時刻表，請稍後再試。")
-                )
-            continue
+        # Search the hospital website based on user_message
+        search_results = await search_hospital_website(user_message)
 
-        # Classify the message
-        classification_response = call_openai_chat_api(user_message, is_classification=True)
-
-        # Check if the classification is not relevant
-        if "non-relevant" in classification_response.lower():
-            await line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="您的問題已經超出我的功能，我無法進行回覆，請重新提出您的問題。")
-            )
-            continue
-
-        result = call_openai_chat_api(user_message)
+        if search_results:
+            result_text = "\n".join(search_results)
+            response_text = f"以下是與您的問題相關的資訊：\n\n{result_text}\n\n詳情請見網址：https://www1.cch.org.tw/opd/Service-e.aspx"
+        else:
+            response_text = "未能找到與您的問題相關的資訊，請換一個問題再試。"
 
         # Increment user's message count
         user_message_counts[user_id]['count'] += 1
 
         await line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text=result)
+            TextSendMessage(text=response_text)
         )
 
     return 'OK'
