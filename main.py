@@ -52,7 +52,7 @@ def call_openai_chat_api(user_message, is_classification=False):
         # Use a special prompt for classification
         prompt = (
             "Classify the following message as relevant or non-relevant "
-            "to medical, endocrinology, medications, medical quality, or patient safety:\n\n"
+            "to disease, medications, endocrinology, healthcare, patient safety, or medical quality:\n\n"
             f"{user_message}"
         )
         messages = [
@@ -91,7 +91,7 @@ parser = WebhookParser(channel_secret)
 
 # Introduction message
 introduction_message = (
-    "我是彰化基督教醫院 內分泌科小助理，您有任何關於：糖尿病、高血壓及內分泌的相關問題都可以問我。"
+    "我是彰化基督教醫院 內分泌科小助理，您有任何關於疾病、藥品、內分泌、醫療、病人安全及醫療品質的相關問題都可以問我。"
 )
 
 @app.post("/callback")
