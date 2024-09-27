@@ -19,8 +19,6 @@ from linebot.models import (
 from dotenv import load_dotenv, find_dotenv
 _ = load_dotenv(find_dotenv())  # read local .env file
 
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-
 # Dictionary to store user message counts and reset times
 user_message_counts = {}
 
@@ -36,7 +34,7 @@ def reset_user_count(user_id):
 # Initialize OpenAI API key
 openai.api_key = os.getenv('OPENAI_API_KEY', None)
 
-def call_openai_assistant_api(user_message):
+async def call_openai_assistant_api(user_message):
     assistant_id = "asst_HVKXE6R3ZcGb6oW6fDEpbdOi"  # Your Assistant ID
     
     messages = [
@@ -44,7 +42,7 @@ def call_openai_assistant_api(user_message):
         {"role": "user", "content": user_message},
     ]
 
-    response = openai.ChatCompletion.create(
+    response = await openai.ChatCompletion.acreate(
         model="gpt-3.5-turbo",
         messages=messages
     )
@@ -120,7 +118,7 @@ async def handle_callback(request: Request):
             continue
 
         # Call the OpenAI Assistant API with the user's message
-        result = call_openai_assistant_api(user_message)
+        result = await call_openai_assistant_api(user_message)
 
         # Increment user's message count
         user_message_counts[user_id]['count'] += 1
@@ -130,4 +128,4 @@ async def handle_callback(request: Request):
             TextSendMessage(text=result)
         )
 
-    return 'OK'
+    return {"status": "ok"}
