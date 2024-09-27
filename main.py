@@ -48,7 +48,7 @@ def search_vector_store(query):
         logger.error("API key is not set")
         return None
 
-    url = f"https://api.openai.com/v1/vector_stores/{vector_store_id}/query"
+    url = f"https://api.openai.com/v1/vector_stores/{vector_store_id}"
     
     payload = {
         "query": query
@@ -56,7 +56,8 @@ def search_vector_store(query):
     
     headers = {
         "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "OpenAI-Beta": "assistants=v2"
     }
 
     logger.info(f"Sending request to Vector Store with query: {query}")
@@ -75,7 +76,7 @@ async def call_openai_chat_api(user_message):
     
     assistant_id = 'asst_HVKXE6R3ZcGb6oW6fDEpbdOi'  # 指定助手 ID
 
-    #首先檢查知識庫
+    # 首先檢查知識庫
     vector_store_response = search_vector_store(user_message)
     knowledge_content = ""
     
