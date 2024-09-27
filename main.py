@@ -45,7 +45,7 @@ def search_vector_store(query, vector_store_id):
         logger.error("API key is not set")
         return None
 
-    url = f"https://api.openai.com/v1/vector_stores/{vector_store_id}/search"
+    url = f"https://api.openai.com/v1/vector_stores/{vs_O4EC1xmZuHy3WiSlcmklQgsR}/search"
     
     payload = {
         "query": query,
