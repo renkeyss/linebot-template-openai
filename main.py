@@ -25,7 +25,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # 讀取環境變數
-_ = load_dotenv(find_dotenv())  # read local .env file
+_ = load_dotenv(find_dotenv())
 
 # Dictionary to store user message counts and reset times
 user_message_counts = {}
@@ -39,70 +39,21 @@ def reset_user_count(user_id):
         'reset_time': datetime.now() + timedelta(days=1)
     }
 
-# 檢索 Vector store 的函式
-def search_file_store(query, file_id):
-    api_key = os.getenv('OPENAI_API_KEY', None)
-    if not api_key:
-        logger.error("API key is not set")
-        return None
-
-    url = f"https://api.openai.com/v1/files/{file_id}/search"
-    
-    payload = {
-        "query": query,
-    }
-    
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-
-    logger.info(f"Sending request to File store with query: {query}")
-    
-    response = requests.post(url, json=payload, headers=headers)
-    
-    if response.status_code == 200:
-        return response.json()  # 假設回應返回 JSON
-    else:
-        logger.error(f"Error: Failed to search File store, HTTP code: {response.status_code}, error info: {response.text}")
-        return None
-
-# 呼叫 OpenAI 助手
-async def call_openai_assistant(user_message, assistant_id):
-    api_key = os.getenv('OPENAI_API_KEY', None)
-    if not api_key:
-        logger.error("API key is not set")
-        return "API key is not set."
-
-    url = f"https://api.openai.com/v1/assistants/{assistant_id}/messages"
-    
-    payload = {
-        "input": user_message
-    }
-    
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-
-    logger.info(f"Sending request to OpenAI assistant with input: {user_message}")
-    
-    response = requests.post(url, json=payload, headers=headers)
-    
-    if response.status_code == 200:
-        response_data = response.json()
-        logger.info(f"OpenAI assistant response: {response_data}")
-        return response_data['choices'][0]['message']['content']  # 假設回應返回 JSON
-    else:
-        logger.error(f"Error: Failed to call OpenAI assistant, HTTP code: {response.status_code}, error info: {response.text}")
-        return f"Error: Failed to call OpenAI assistant. HTTP code: {response.status_code}, error info: {response.text}"
-
-# 初始化 OpenAI API
-async def call_openai_chat_api(user_message, is_classification=False):
+# 呼叫 OpenAI Chat API
+async def call_openai_chat_api(user_message):
     openai.api_key = os.getenv('OPENAI_API_KEY', None)
-    assistant_id = 'asst_ShZXAJwKlokkj9rNhRi2f6pG'
     
-    return await call_openai_assistant(user_message, assistant_id)
+    try:
+        response = await openai.ChatCompletion.acreate(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "user", "content": user_message}
+            ]
+        )
+        return response.choices[0]['message']['content']
+    except Exception as e:
+        logger.error(f"Error calling OpenAI assistant: {e}")
+        return "Error: 系統出現錯誤，請稍後再試。"
 
 # Get channel_secret and channel_access_token from your environment variable
 channel_secret = os.getenv('ChannelSecret', None)
@@ -142,7 +93,6 @@ async def handle_callback(request: Request):
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     for event in events:
-        # 檢查事件是否為 MessageEvent 並確定位訊息類型
         if not isinstance(event, MessageEvent):
             continue
         if not isinstance(event.message, TextMessage):
@@ -177,14 +127,9 @@ async def handle_callback(request: Request):
             )
             continue
 
-        # 呼叫 OpenAI 助手（或執行其他操作）
-        try:
-            result_text = await call_openai_chat_api(user_message)
-            logger.info(f"OpenAI assistant response: {result_text}")
-        except Exception as e:
-            logger.error(f"Error calling OpenAI assistant: {e}")
-            result_text = "Error: 系統出現錯誤，請稍後再試。"
-
+        # 呼叫 OpenAI 助手
+        result_text = await call_openai_chat_api(user_message)
+        
         # 更新用戶訊息計數
         user_message_counts[user_id]['count'] += 1
 
