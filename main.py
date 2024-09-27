@@ -1,11 +1,8 @@
 # -*- coding: utf-8 -*-
-
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
-#
 # https://www.apache.org/licenses/LICENSE-2.0
-#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -29,6 +26,7 @@ from linebot.models import (
     MessageEvent, TextMessage, TextSendMessage,
 )
 from dotenv import load_dotenv, find_dotenv
+
 _ = load_dotenv(find_dotenv())  # read local .env file
 
 # Dictionary to store user message counts and reset times
@@ -44,7 +42,6 @@ def reset_user_count(user_id):
     }
 
 # Initialize OpenAI API
-
 def call_openai_chat_api(user_message, is_classification=False):
     openai.api_key = os.getenv('OPENAI_API_KEY', None)
     
@@ -72,6 +69,20 @@ def call_openai_chat_api(user_message, is_classification=False):
 
     return response.choices[0].message['content']
 
+# Fetch the doctor schedule for the hospital (assuming the existence of an API)
+async def fetch_doctor_schedule():
+    # This is a hypothetical example. Please replace with actual API/website if exists.
+    url = "https://example.com/doctor_schedule_api"  # Replace with actual URL
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            if response.status != 200:
+                raise HTTPException(
+                    status_code=response.status,
+                    detail="Failed to fetch doctor schedule"
+                )
+            data = await response.json()
+    return data
+
 # Get channel_secret and channel_access_token from your environment variable
 channel_secret = os.getenv('ChannelSecret', None)
 channel_access_token = os.getenv('ChannelAccessToken', None)
@@ -91,7 +102,7 @@ parser = WebhookParser(channel_secret)
 
 # Introduction message
 introduction_message = (
-    "我是彰化基督教醫院 內分泌科小助理，您有任何關於糖尿病的相關問題都可以問我。"
+    "我是彰化基督教醫院 內分泌科小助理，您有任何關於疾病、藥品、內分泌、醫療、病人安全及醫療品質的相關問題都可以問我。"
 )
 
 @app.post("/callback")
@@ -126,7 +137,7 @@ async def handle_callback(request: Request):
         if user_message_counts[user_id]['count'] >= USER_DAILY_LIMIT:
             await line_bot_api.reply_message(
                 event.reply_token,
-                TextSendMessage(text="您目前的使用量已用完，請明天再詢問，如有任何問題請致電 04-7238595 分機 3239 我們將有專人為您服務。")
+                TextSendMessage(text="您今天的用量已經超過，請明天再詢問。")
             )
             continue
 
@@ -138,6 +149,22 @@ async def handle_callback(request: Request):
                 event.reply_token,
                 TextSendMessage(text=introduction_message)
             )
+            continue
+
+        # Check if the user is asking for doctor schedule
+        if "門診" in user_message or "醫師時刻表" in user_message:
+            try:
+                doctor_schedule = await fetch_doctor_schedule()
+                schedule_info = "\n".join([f"{item['department']}: {item['doctors']}" for item in doctor_schedule])
+                await line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text=f"以下是彰化基督教醫院各科及醫師的門診時刻表：\n\n{schedule_info}\n\n詳情請見網址：https://example.com/doctor_schedule")
+                )
+            except Exception as e:
+                await line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text="無法取得門診時刻表，請稍後再試。")
+                )
             continue
 
         # Classify the message
