@@ -42,7 +42,7 @@ def reset_user_count(user_id):
 # 查詢 OpenAI Storage Vector Store
 def search_vector_store(query):
     vector_store_id = 'vs_O4EC1xmZuHy3WiSlcmklQgsR'  # Vector Store ID
-    api_key = os.getenv('OPENAI_API_KEY', None)
+    api_key = os.getenv('sk-svcacct-NP1d9CtEkOHEtq-enYm-W8_VqvLZCzcQrvHtWniA7155mA8Uv_NHKvS8e4zT3BlbkFJ01lASBqXPuj7i02QcK6Pu9yC7FDfoybpBZh2Wb-4I-vkHi2UzXHBrMU_35AA', None)
     
     if not api_key:
         logger.error("API key is not set")
@@ -72,7 +72,7 @@ def search_vector_store(query):
 
 # 呼叫 OpenAI Chat API
 async def call_openai_chat_api(user_message):
-    openai.api_key = os.getenv('OPENAI_API_KEY', None)
+    openai.api_key = os.getenv('sk-svcacct-NP1d9CtEkOHEtq-enYm-W8_VqvLZCzcQrvHtWniA7155mA8Uv_NHKvS8e4zT3BlbkFJ01lASBqXPuj7i02QcK6Pu9yC7FDfoybpBZh2Wb-4I-vkHi2UzXHBrMU_35AA', None)
     
     assistant_id = 'asst_HVKXE6R3ZcGb6oW6fDEpbdOi'  # 指定助手 ID
 
