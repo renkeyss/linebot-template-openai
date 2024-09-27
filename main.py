@@ -43,10 +43,13 @@ def reset_user_count(user_id):
 async def call_openai_chat_api(user_message):
     openai.api_key = os.getenv('OPENAI_API_KEY', None)
     
+    assistant_id = 'asst_HVKXE6R3ZcGb6oW6fDEpbdOi'  # 指定助手 ID
+    
     try:
         response = await openai.ChatCompletion.acreate(
             model="gpt-3.5-turbo",
             messages=[
+                {"role": "system", "content": f"Assistant ID: {assistant_id}. 你是一個樂於助人的助手，請使用繁體中文回覆。"},
                 {"role": "user", "content": user_message}
             ]
         )
