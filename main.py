@@ -56,42 +56,50 @@ def search_file_store(query, file_id):
         "Content-Type": "application/json"
     }
 
-    logger.info(f"Sending request to Vector store with query: {query}")
+    logger.info(f"Sending request to File store with query: {query}")
     
     response = requests.post(url, json=payload, headers=headers)
     
     if response.status_code == 200:
         return response.json()  # 假設回應返回 JSON
     else:
-        logger.error(f"Error: Failed to search Vector store, HTTP code: {response.status_code}, error info: {response.text}")
+        logger.error(f"Error: Failed to search File store, HTTP code: {response.status_code}, error info: {response.text}")
         return None
 
+# 呼叫 OpenAI 助手
+async def call_openai_assistant(user_message, assistant_id):
+    api_key = os.getenv('OPENAI_API_KEY', None)
+    if not api_key:
+        logger.error("API key is not set")
+        return "API key is not set."
+
+    url = f"https://api.openai.com/v1/assistants/{assistant_id}/messages"
+    
+    payload = {
+        "input": user_message
+    }
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    logger.info(f"Sending request to OpenAI assistant with input: {user_message}")
+    
+    response = requests.post(url, json=payload, headers=headers)
+    
+    if response.status_code == 200:
+        return response.json()['choices'][0]['message']['content']  # 假設回應返回 JSON
+    else:
+        logger.error(f"Error: Failed to call OpenAI assistant, HTTP code: {response.status_code}, error info: {response.text}")
+        return "Error: Failed to call OpenAI assistant."
+
+# 初始化 OpenAI API
 async def call_openai_chat_api(user_message, is_classification=False):
     openai.api_key = os.getenv('OPENAI_API_KEY', None)
+    assistant_id = 'asst_ShZXAJwKlokkj9rNhRi2f6pG'
     
-    if is_classification:
-        # Use a special prompt for classification
-        prompt = (
-            "Classify the following message as relevant or non-relevant "
-            "to medical, endocrinology, medications, medical quality, or patient safety:\n\n"
-            f"{user_message}"
-        )
-        messages = [
-            {"role": "system", "content": "你是一個樂於助人的助手。"},
-            {"role": "user", "content": prompt},
-        ]
-    else:
-        messages = [
-            {"role": "system", "content": "你是一個樂於助人的助手。請使用繁體中文回覆。"},
-            {"role": "user", "content": user_message},
-        ]
-
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=messages
-    )
-
-    return response.choices[0].message['content']
+    return await call_openai_assistant(user_message, assistant_id)
 
 # Get channel_secret and channel_access_token from your environment variable
 channel_secret = os.getenv('ChannelSecret', None)
