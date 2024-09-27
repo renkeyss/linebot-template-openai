@@ -46,16 +46,25 @@ def reset_user_count(user_id):
 # Initialize OpenAI API
 
 def call_openai_chat_api(user_message, is_classification=False):
-    openai.api.key = os.getenv('OPENAI_API_KEY', None)
+    openai.api_key = os.getenv('OPENAI_API_KEY', None)
     
-    messages = [
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": user_message},
-    ]
     if is_classification:
         # Use a special prompt for classification
-        messages.insert(0, {"role": "system", "content": "Classify this message as relevant or non-relevant to medical, endocrinology, medications, medical quality, or patient safety."})
-    
+        prompt = (
+            "Classify the following message as relevant or non-relevant "
+            "to medical, endocrinology, medications, medical quality, or patient safety:\n\n"
+            f"{user_message}"
+        )
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": prompt},
+        ]
+    else:
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": user_message},
+        ]
+
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages=messages
@@ -124,7 +133,7 @@ async def handle_callback(request: Request):
         user_message = event.message.text
 
         # Classify the message
-        classification_response = call_openai_chat_api(f"Classify this message: '{user_message}'", is_classification=True)
+        classification_response = call_openai_chat_api(user_message, is_classification=True)
 
         # Check if the classification is not relevant
         if "non-relevant" in classification_response.lower():
