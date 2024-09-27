@@ -1,3 +1,4 @@
+
 # -*- coding: utf-8 -*-
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
@@ -46,7 +47,7 @@ def reset_user_count(user_id):
 # Initialize OpenAI API
 def call_openai_chat_api(user_message, is_classification=False):
     openai.api_key = os.getenv('OPENAI_API_KEY', None)
-    
+
     if is_classification:
         # Use a special prompt for classification
         prompt = (
@@ -83,7 +84,7 @@ async def search_website(url, query):
             page_content = await response.text()
 
     soup = BeautifulSoup(page_content, 'html.parser')
-    
+
     # Assuming the relevant information is in text/plain format or within tags
     search_results = []
     for elem in soup.find_all(text=True):
