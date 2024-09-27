@@ -32,6 +32,7 @@ _ = load_dotenv(find_dotenv())  # read local .env file
 
 # Dictionary to store user message counts and reset times
 user_message_counts = {}
+user_state = {}  # Dictionary to keep track of user states
 
 # User daily limit
 USER_DAILY_LIMIT = 5
@@ -71,8 +72,7 @@ def call_openai_chat_api(user_message, is_classification=False):
     return response.choices[0].message['content']
 
 # Fetch and search information from the hospital website
-async def search_hospital_website(query):
-    url = "https://www1.cch.org.tw/opd/Service-e.aspx"
+async def search_website(url, query):
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as response:
             if response.status != 200:
@@ -160,21 +160,73 @@ async def handle_callback(request: Request):
             )
             continue
 
-        # Search the hospital website based on user_message
-        search_results = await search_hospital_website(user_message)
+        # Handle "門診表" inquiry
+        if user_message == "門診表":
+            user_state[user_id] = "querying_doctor"
+            await line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="您要查詢哪位醫師的門診時間表？")
+            )
+            continue
 
-        if search_results:
-            result_text = "\n".join(search_results)
-            response_text = f"以下是與您的問題相關的資訊：\n\n{result_text}\n\n詳情請見網址：https://www1.cch.org.tw/opd/Service-e.aspx"
-        else:
-            response_text = "未能找到與您的問題相關的資訊，請換一個問題再試。"
+        # Handle "衛教" inquiry
+        if user_message == "衛教":
+            user_state[user_id] = "querying_education"
+            await line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="您要查詢哪方面的衛教？")
+            )
+            continue
+
+        # Check user state for detailed queries
+        if user_id in user_state:
+            if user_state[user_id] == "querying_doctor":
+                search_results = await search_website("https://www1.cch.org.tw/opd/Service-e.aspx", user_message)
+                del user_state[user_id]
+                if search_results:
+                    result_text = "\n".join(search_results)
+                    response_text = f"以下是與您查詢的醫師門診時間表相關的資訊：\n\n{result_text}\n\n詳情請見網址：https://www1.cch.org.tw/opd/Service-e.aspx"
+                else:
+                    response_text = "未能找到與您查詢的醫師門診時間表相關的資訊，請換一個醫師姓名再試。"
+                await line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text=response_text)
+                )
+                continue
+
+            if user_state[user_id] == "querying_education":
+                search_results = await search_website("https://www.cch.org.tw/knowledge.aspx?pID=1", user_message)
+                del user_state[user_id]
+                if search_results:
+                    result_text = "\n".join(search_results)
+                    response_text = f"以下是與您查詢的衛教相關的資訊：\n\n{result_text}\n\n詳情請見網址：https://www.cch.org.tw/knowledge.aspx?pID=1"
+                else:
+                    response_text = "未能找到與您查詢的衛教相關的資訊，請換一個關鍵字再試。"
+                await line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text=response_text)
+                )
+                continue
+
+        # Classify the message
+        classification_response = call_openai_chat_api(user_message, is_classification=True)
+
+        # Check if the classification is not relevant
+        if "non-relevant" in classification_response.lower():
+            await line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="您的問題已經超出我的功能，我無法進行回覆，請重新提出您的問題。")
+            )
+            continue
+
+        result = call_openai_chat_api(user_message)
 
         # Increment user's message count
         user_message_counts[user_id]['count'] += 1
 
         await line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text=response_text)
+            TextSendMessage(text=result)
         )
 
     return 'OK'
