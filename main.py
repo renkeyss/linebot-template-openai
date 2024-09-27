@@ -15,11 +15,8 @@
 import openai
 import os
 import sys
-import json
-from datetime import datetime, timedelta
-
 import aiohttp
-
+from datetime import datetime, timedelta
 from fastapi import Request, FastAPI, HTTPException
 from linebot import (
     AsyncLineBotApi, WebhookParser
@@ -31,7 +28,6 @@ from linebot.exceptions import (
 from linebot.models import (
     MessageEvent, TextMessage, TextSendMessage,
 )
-
 from dotenv import load_dotenv, find_dotenv
 _ = load_dotenv(find_dotenv())  # read local .env file
 
@@ -49,19 +45,23 @@ def reset_user_count(user_id):
 
 # Initialize OpenAI API
 
-def call_openai_chat_api(user_message):
+def call_openai_chat_api(user_message, is_classification=False):
     openai.api_key = os.getenv('OPENAI_API_KEY', None)
-
+    
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": user_message},
+    ]
+    if is_classification:
+        # Use a special prompt for classification
+        messages.insert(0, {"role": "system", "content": "Classify this message as medical or non-medical."})
+    
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": user_message},
-        ]
+        messages=messages
     )
 
     return response.choices[0].message['content']
-
 
 # Get channel_secret and channel_access_token from your environment variable
 channel_secret = os.getenv('ChannelSecret', None)
@@ -122,9 +122,12 @@ async def handle_callback(request: Request):
             continue
 
         user_message = event.message.text
-        # Check if the message is related to allowed topics
-        allowed_topics = ["內分泌", "糖尿病", "高血壓", "醫療"]
-        if not any(topic in user_message for topic in allowed_topics):
+
+        # Classify the message
+        classification_response = call_openai_chat_api(f"Classify this message: '{user_message}'", is_classification=True)
+
+        # Check if the classification is not medical-related
+        if "non-medical" in classification_response.lower():
             await line_bot_api.reply_message(
                 event.reply_token,
                 TextSendMessage(text="我只能回覆內分泌科的相關問題。")
