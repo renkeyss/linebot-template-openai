@@ -20,10 +20,13 @@ from linebot.aiohttp_async_http_client import AiohttpAsyncHttpClient
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
 from dotenv import load_dotenv, find_dotenv
+from bs4 import BeautifulSoup
+
 _ = load_dotenv(find_dotenv())  # read local .env file
 
 # Dictionary to store user message counts and reset times
 user_message_counts = {}
+user_state = {}  # Dictionary to keep track of user states
 
 # User daily limit
 USER_DAILY_LIMIT = 5
@@ -37,7 +40,7 @@ def reset_user_count(user_id):
 # Initialize OpenAI API
 def call_openai_chat_api(user_message, is_classification=False):
     openai.api_key = os.getenv('OPENAI_API_KEY', None)
-    
+
     if is_classification:
         prompt = (
             "Classify the following message as relevant or non-relevant "
@@ -60,6 +63,25 @@ def call_openai_chat_api(user_message, is_classification=False):
     )
 
     return response.choices[0].message['content']
+
+# Fetch and search information from the hospital website
+async def search_hospital_website(query):
+    urls = [
+        "https://www1.cch.org.tw/opd/Service-e.aspx",
+        "https://www.cch.org.tw/knowledge.aspx?pID=1"
+    ]
+    search_results = []
+
+    async with aiohttp.ClientSession() as session:
+        for url in urls:
+            async with session.get(url) as response:
+                if response.status == 200:
+                    page_content = await response.text()
+                    soup = BeautifulSoup(page_content, 'html.parser')
+                    results = [elem.strip() for elem in soup.find_all(text=True) if query in elem]
+                    search_results.extend(results)
+    
+    return search_results
 
 # Get channel_secret and channel_access_token from your environment variable
 channel_secret = os.getenv('ChannelSecret', None)
@@ -140,15 +162,26 @@ async def handle_callback(request: Request):
             )
             continue
 
+        # Perform web search for the query
+        search_results = await search_hospital_website(user_message)
+        if search_results:
+            result_text = "\n".join(search_results[:5])  # limiting to 5 results
+            response_text = f"以下是與您查詢的關鍵字相關的資訊：\n\n{result_text}\n\n詳情請參考：https://www1.cch.org.tw/opd/Service-e.aspx 或 https://www.cch.org.tw/knowledge.aspx?pID=1"
+        else:
+            response_text = "未能找到與您查詢的關鍵字相關的資訊，請換一個關鍵字再試。"
+
         # Increase user's message count
         user_message_counts[user_id]['count'] += 1
 
-        # Get response from OpenAI
-        result = call_openai_chat_api(user_message)
-
+        # Reply with the search results
         await line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text=result)
+            TextSendMessage(text=response_text)
         )
 
     return 'OK'
+
+# Close aiohttp session when the application stops
+@app.on_event("shutdown")
+async def shutdown_event():
+    await session.close()
