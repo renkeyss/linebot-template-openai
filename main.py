@@ -35,7 +35,7 @@ def reset_user_count(user_id):
 openai.api_key = os.getenv('OPENAI_API_KEY', None)
 
 def call_openai_assistant_api(user_message):
-    assistant_id = "asst_HVKXE6R3ZcGb6oW6fDEpbdOi"
+    assistant_id = "asst_HVKXE6R3ZcGb6oW6fDEpbdOi"  # Your Assistant ID
     
     messages = [
         {"role": "system", "content": f"Assistant ID: {assistant_id}. 你是一個樂於助人的助手，請使用繁體中文回覆。"},
@@ -47,7 +47,7 @@ def call_openai_assistant_api(user_message):
         messages=messages
     )
 
-    return response.choices[0].message['content']
+    return response.choices[0]['message']['content']
 
 # Get channel_secret and channel_access_token from your environment variable
 channel_secret = os.getenv('ChannelSecret', None)
