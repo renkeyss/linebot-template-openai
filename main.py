@@ -83,7 +83,7 @@ def call_vector_search_api(query):
         documents=[query]
     )
 
-    return response['data'][0]['text']
+    return response['data'][0]['document']
 
 def search_cch_website(query):
     openai.api_key = os.getenv('OPENAI_API_KEY', None)
@@ -182,7 +182,7 @@ async def handle_callback(request: Request):
         cch_search_result = search_cch_website(user_message)
 
         # Combine both results
-        result = f"{vector_search_result}\n\nFrom CCH website:\n{cch_search_result}"
+        result = f"內分泌科 Vector Store:\n{vector_search_result}\n\nFrom Changhua Christian Hospital website:\n{cch_search_result}"
 
         # Increment user's message count
         user_message_counts[user_id]['count'] += 1
