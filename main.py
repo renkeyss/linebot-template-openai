@@ -20,11 +20,12 @@ from linebot.models import (
 from dotenv import load_dotenv, find_dotenv
 import logging
 
-_ = load_dotenv(find_dotenv())  # read local .env file
-
 # 設置日誌紀錄
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# 讀取環境變數
+_ = load_dotenv(find_dotenv())  # read local .env file
 
 # Dictionary to store user message counts and reset times
 user_message_counts = {}
@@ -89,10 +90,12 @@ async def call_openai_assistant(user_message, assistant_id):
     response = requests.post(url, json=payload, headers=headers)
     
     if response.status_code == 200:
-        return response.json()['choices'][0]['message']['content']  # 假設回應返回 JSON
+        response_data = response.json()
+        logger.info(f"OpenAI assistant response: {response_data}")
+        return response_data['choices'][0]['message']['content']  # 假設回應返回 JSON
     else:
         logger.error(f"Error: Failed to call OpenAI assistant, HTTP code: {response.status_code}, error info: {response.text}")
-        return "Error: Failed to call OpenAI assistant."
+        return f"Error: Failed to call OpenAI assistant. HTTP code: {response.status_code}, error info: {response.text}"
 
 # 初始化 OpenAI API
 async def call_openai_chat_api(user_message, is_classification=False):
@@ -139,23 +142,25 @@ async def handle_callback(request: Request):
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     for event in events:
+        # 檢查事件是否為 MessageEvent 並確定位訊息類型
         if not isinstance(event, MessageEvent):
             continue
         if not isinstance(event.message, TextMessage):
             continue
 
         user_id = event.source.user_id
+        user_message = event.message.text
 
-        logger.info(f"Received message from user {user_id}")
+        logger.info(f"Received message from user {user_id}: {user_message}")
 
-        # Check if user_ids's count is to be reset
+        # 檢查訊息計數是否需要重置
         if user_id in user_message_counts:
             if datetime.now() >= user_message_counts[user_id]['reset_time']:
                 reset_user_count(user_id)
         else:
             reset_user_count(user_id)
 
-        # Check if user exceeded daily limit
+        # 檢查用戶是否超過每日限制
         if user_message_counts[user_id]['count'] >= USER_DAILY_LIMIT:
             logger.info(f"User {user_id} exceeded daily limit")
             await line_bot_api.reply_message(
@@ -164,9 +169,7 @@ async def handle_callback(request: Request):
             )
             continue
 
-        user_message = event.message.text
-
-        # Check if the user is asking for an introduction
+        # 處理特殊請求（如介紹）
         if "介紹" in user_message or "你是誰" in user_message:
             await line_bot_api.reply_message(
                 event.reply_token,
@@ -174,44 +177,18 @@ async def handle_callback(request: Request):
             )
             continue
 
-        # Classify the message
+        # 呼叫 OpenAI 助手（或執行其他操作）
         try:
-            classification_response = await call_openai_chat_api(user_message, is_classification=True)
-            logger.info(f"Classification response: {classification_response}")
-        except Exception as e:
-            logger.error(f"Error calling classification API: {e}")
-            await line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="系統出現錯誤，請稍後再試。")
-            )
-            continue
-
-        # Check if the classification is not relevant
-        if "non-relevant" in classification_response.lower():
-            await line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="您的問題已經超出我的功能，我無法進行回覆，請重新提出您的問題。")
-            )
-            continue
-
-        # 在此處調用 File store 檢索函式
-        file_id = "file-BElA7yaA2ddwnGd2AoF4orX0"
-        try:
-            search_result = search_file_store(user_message, file_id)
-            logger.info(f"File store search result: {search_result}")
-        except Exception as e:
-            logger.error(f"Error searching file store: {e}")
-            search_result = None
-        
-        if search_result and search_result.get("results"):
-            # 根據您預期的結構處理 search_result
-            result_text = "\n".join([res["text"] for res in search_result["results"]])
-        else:
             result_text = await call_openai_chat_api(user_message)
+            logger.info(f"OpenAI assistant response: {result_text}")
+        except Exception as e:
+            logger.error(f"Error calling OpenAI assistant: {e}")
+            result_text = "Error: 系統出現錯誤，請稍後再試。"
 
-        # Increment user's message count
+        # 更新用戶訊息計數
         user_message_counts[user_id]['count'] += 1
 
+        # 回應用戶訊息
         await line_bot_api.reply_message(
             event.reply_token,
             TextSendMessage(text=result_text)
