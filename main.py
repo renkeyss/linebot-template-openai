@@ -39,50 +39,12 @@ def reset_user_count(user_id):
         'reset_time': datetime.now() + timedelta(days=1)
     }
 
-# 查詢知識庫
-def search_knowledge_base(query):
-    knowledge_base_id = 'vs_O4EC1xmZuHy3WiSlcmklQgsR'  # 知識庫 ID
-    api_key = os.getenv('OPENAI_API_KEY', None)
-    
-    if not api_key:
-        logger.error("API key is not set")
-        return None
-
-    url = f"https://api.openai.com/v1/knowledge_bases/{knowledge_base_id}/query"
-    
-    payload = {
-        "query": query,
-    }
-    
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-
-    logger.info(f"Sending request to Knowledge Base with query: {query}")
-    
-    response = requests.post(url, json=payload, headers=headers)
-    
-    if response.status_code == 200:
-        return response.json()  # 假設回應返回 JSON
-    else:
-        logger.error(f"Error: Failed to search Knowledge Base, HTTP code: {response.status_code}, error info: {response.text}")
-        return None
-
 # 呼叫 OpenAI Chat API
 async def call_openai_chat_api(user_message):
     openai.api_key = os.getenv('OPENAI_API_KEY', None)
     
     assistant_id = 'asst_HVKXE6R3ZcGb6oW6fDEpbdOi'  # 指定助手 ID
-
-    # 首先檢查知識庫
-    knowledge_base_response = search_knowledge_base(user_message)
-    if knowledge_base_response and "results" in knowledge_base_response:
-        knowledge_base_info = knowledge_base_response["results"]
-        if knowledge_base_info:
-            # 整合知識庫資料，形成完整的回覆
-            knowledge_content = "\n".join(item['content'] for item in knowledge_base_info)
-            user_message = f"{user_message}\n相關知識庫資料：\n{knowledge_content}"
+    knowledge_base_id = 'vs_O4EC1xmZuHy3WiSlcmklQgsR'  # 指定知識庫 ID
     
     try:
         response = await openai.ChatCompletion.acreate(
@@ -92,6 +54,9 @@ async def call_openai_chat_api(user_message):
                 {"role": "user", "content": user_message}
             ]
         )
+        # 如果需要使用知識庫的功能需要在這裡增加查詢知識庫的邏輯
+        # 這個部分基於具體需求，是否查詢知識庫或是如何查詢還沒有包含
+
         return response.choices[0]['message']['content']
     except Exception as e:
         logger.error(f"Error calling OpenAI assistant: {e}")
