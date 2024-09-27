@@ -29,7 +29,6 @@ from linebot.models import (
     MessageEvent, TextMessage, TextSendMessage,
 )
 from dotenv import load_dotenv, find_dotenv
-
 _ = load_dotenv(find_dotenv())  # read local .env file
 
 # Dictionary to store user message counts and reset times
@@ -38,19 +37,14 @@ user_message_counts = {}
 # User daily limit
 USER_DAILY_LIMIT = 5
 
-# Vector Store for Endocrinology Scientists ID
-VECTOR_STORE_ID = 'vs_G4UCAxMLaXFL4WcwwtUjcJqg'
-
-
-# Function to reset user count
 def reset_user_count(user_id):
     user_message_counts[user_id] = {
         'count': 0,
         'reset_time': datetime.now() + timedelta(days=1)
     }
 
+# Initialize OpenAI API
 
-# Initialize OpenAI API to handle normal chat and classification
 def call_openai_chat_api(user_message, is_classification=False):
     openai.api_key = os.getenv('OPENAI_API_KEY', None)
     
@@ -63,12 +57,12 @@ def call_openai_chat_api(user_message, is_classification=False):
         )
         messages = [
             {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": prompt}
+            {"role": "user", "content": prompt},
         ]
     else:
         messages = [
             {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": user_message}
+            {"role": "user", "content": user_message},
         ]
 
     response = openai.ChatCompletion.create(
@@ -77,22 +71,6 @@ def call_openai_chat_api(user_message, is_classification=False):
     )
 
     return response.choices[0].message['content']
-
-
-# Function to query the vector store
-def call_vector_search_api(query):
-    openai.api_key = os.getenv('OPENAI_API_KEY', None)
-    
-    response = openai.Engine(id=VECTOR_STORE_ID).search(
-        queries=[{
-            "query": query,
-            "return_metadata": True
-        }]
-    )
-
-    # Assuming the vector store returns a list of results and taking the first one
-    return response['data'][0]['result']
-
 
 # Get channel_secret and channel_access_token from your environment variable
 channel_secret = os.getenv('ChannelSecret', None)
@@ -115,7 +93,6 @@ parser = WebhookParser(channel_secret)
 introduction_message = (
     "我是彰化基督教醫院 內分泌科小助理，您有任何關於：糖尿病、高血壓及內分泌的相關問題都可以問我。"
 )
-
 
 @app.post("/callback")
 async def handle_callback(request: Request):
@@ -155,14 +132,6 @@ async def handle_callback(request: Request):
 
         user_message = event.message.text
 
-        # Check if the user is asking for an introduction
-        if any(word in user_message for word in ["介紹", "你是誰"]):
-            await line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text=introduction_message)
-            )
-            continue
-
         # Classify the message
         classification_response = call_openai_chat_api(user_message, is_classification=True)
 
@@ -174,8 +143,15 @@ async def handle_callback(request: Request):
             )
             continue
 
-        # Use vector store for endocrinology-related queries
-        result = call_vector_search_api(user_message)
+        # Send the introduction message if the user asks for an introduction
+        if "介紹" in user_message or "你是誰" in user_message:
+            await line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=introduction_message)
+            )
+            continue
+
+        result = call_openai_chat_api(user_message)
 
         # Increment user's message count
         user_message_counts[user_id]['count'] += 1
