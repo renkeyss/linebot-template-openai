@@ -152,7 +152,7 @@ async def handle_callback(request: Request):
             continue
 
         # Check if the user is asking for doctor schedule
-        if "門診" in user_message or "醫師時刻表" in user_message:
+        if "門診" in user_message or "門診時間表" in user_message:
             try:
                 doctor_schedule = await fetch_doctor_schedule()
                 schedule_info = "\n".join([f"{item['department']}: {item['doctors']}" for item in doctor_schedule])
