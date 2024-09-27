@@ -46,7 +46,7 @@ def reset_user_count(user_id):
 # Initialize OpenAI API
 
 def call_openai_chat_api(user_message, is_classification=False):
-    openai.api_key = os.getenv('OPENAI_API_KEY', None)
+    openai.api.key = os.getenv('OPENAI_API_KEY', None)
     
     messages = [
         {"role": "system", "content": "You are a helpful assistant."},
@@ -54,7 +54,7 @@ def call_openai_chat_api(user_message, is_classification=False):
     ]
     if is_classification:
         # Use a special prompt for classification
-        messages.insert(0, {"role": "system", "content": "Classify this message as medical or non-medical."})
+        messages.insert(0, {"role": "system", "content": "Classify this message as relevant or non-relevant to medical, endocrinology, medications, medical quality, or patient safety."})
     
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
@@ -126,11 +126,11 @@ async def handle_callback(request: Request):
         # Classify the message
         classification_response = call_openai_chat_api(f"Classify this message: '{user_message}'", is_classification=True)
 
-        # Check if the classification is not medical-related
-        if "non-medical" in classification_response.lower():
+        # Check if the classification is not relevant
+        if "non-relevant" in classification_response.lower():
             await line_bot_api.reply_message(
                 event.reply_token,
-                TextSendMessage(text="我只能回覆內分泌科的相關問題。")
+                TextSendMessage(text="您的問題已經超出我的功能，我無法進行回覆，請重新提出您的問題。")
             )
             continue
 
