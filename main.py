@@ -73,13 +73,17 @@ if channel_access_token is None:
     print('Specify LINE_CHANNEL_ACCESS_TOKEN as environment variable.')
     sys.exit(1)
 
-# Initialize LINE Bot Messaigng API
+# Initialize LINE Bot Messaging API
 app = FastAPI()
 session = aiohttp.ClientSession()
 async_http_client = AiohttpAsyncHttpClient(session)
 line_bot_api = AsyncLineBotApi(channel_access_token, async_http_client)
 parser = WebhookParser(channel_secret)
 
+# Introduction message
+introduction_message = (
+    "我是彰化基督教醫院 內分泌科小助理，您有任何關於：糖尿病、高血壓及內分泌的相關問題都可以問我。"
+)
 
 @app.post("/callback")
 async def handle_callback(request: Request):
@@ -117,15 +121,25 @@ async def handle_callback(request: Request):
             )
             continue
 
-        # Check if the message is related to endocrinology
-        if "內分泌" not in event.message.text:
+        user_message = event.message.text
+        # Check if the message is related to allowed topics
+        allowed_topics = ["內分泌", "糖尿病", "高血壓", "醫療"]
+        if not any(topic in user_message for topic in allowed_topics):
             await line_bot_api.reply_message(
                 event.reply_token,
                 TextSendMessage(text="我只能回覆內分泌科的相關問題。")
             )
             continue
 
-        result = call_openai_chat_api(event.message.text)
+        # Send the introduction message if the user asks for an introduction
+        if "介紹" in user_message or "你是誰" in user_message:
+            await line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=introduction_message)
+            )
+            continue
+
+        result = call_openai_chat_api(user_message)
 
         # Increment user's message count
         user_message_counts[user_id]['count'] += 1
