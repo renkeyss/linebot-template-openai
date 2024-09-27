@@ -1,4 +1,13 @@
 # -*- coding: utf-8 -*-
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain
+# a copy of the License at
+# https://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
 
 import openai
 import os
@@ -6,10 +15,16 @@ import sys
 import aiohttp
 from datetime import datetime, timedelta
 from fastapi import Request, FastAPI, HTTPException
-from linebot import AsyncLineBotApi, WebhookParser
+from linebot import (
+    AsyncLineBotApi, WebhookParser
+)
 from linebot.aiohttp_async_http_client import AiohttpAsyncHttpClient
-from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, TextSendMessage
+from linebot.exceptions import (
+    InvalidSignatureError
+)
+from linebot.models import (
+    MessageEvent, TextMessage, TextSendMessage,
+)
 from dotenv import load_dotenv, find_dotenv
 from bs4 import BeautifulSoup
 
@@ -17,7 +32,6 @@ _ = load_dotenv(find_dotenv())  # read local .env file
 
 # Dictionary to store user message counts and reset times
 user_message_counts = {}
-user_state = {}  # Dictionary to keep track of user states
 
 # User daily limit
 USER_DAILY_LIMIT = 5
@@ -31,8 +45,9 @@ def reset_user_count(user_id):
 # Initialize OpenAI API
 def call_openai_chat_api(user_message, is_classification=False):
     openai.api_key = os.getenv('OPENAI_API_KEY', None)
-
+    
     if is_classification:
+        # Use a special prompt for classification
         prompt = (
             "Classify the following message as relevant or non-relevant "
             "to disease, medications, endocrinology, healthcare, patient safety, or medical quality:\n\n"
@@ -55,19 +70,21 @@ def call_openai_chat_api(user_message, is_classification=False):
 
     return response.choices[0].message['content']
 
-# Fetch and search information from the specified website
-async def search_website(url, query):
+# Fetch and search information from the hospital website
+async def search_hospital_website(query):
+    url = "https://www1.cch.org.tw/opd/Service-e.aspx"
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as response:
             if response.status != 200:
                 raise HTTPException(
                     status_code=response.status,
-                    detail="Failed to fetch website"
+                    detail="Failed to fetch hospital website"
                 )
             page_content = await response.text()
 
     soup = BeautifulSoup(page_content, 'html.parser')
-
+    
+    # Assuming the relevant information is in text/plain format or within tags
     search_results = []
     for elem in soup.find_all(text=True):
         if query in elem:
@@ -101,6 +118,7 @@ introduction_message = (
 async def handle_callback(request: Request):
     signature = request.headers['X-Line-Signature']
 
+    # get request body as text
     body = await request.body()
     body = body.decode()
 
@@ -117,12 +135,14 @@ async def handle_callback(request: Request):
 
         user_id = event.source.user_id
 
+        # Check if user_ids's count is to be reset
         if user_id in user_message_counts:
             if datetime.now() >= user_message_counts[user_id]['reset_time']:
                 reset_user_count(user_id)
         else:
             reset_user_count(user_id)
 
+        # Check if user exceeded daily limit
         if user_message_counts[user_id]['count'] >= USER_DAILY_LIMIT:
             await line_bot_api.reply_message(
                 event.reply_token,
@@ -132,6 +152,7 @@ async def handle_callback(request: Request):
 
         user_message = event.message.text
 
+        # Check if the user is asking for an introduction
         if "介紹" in user_message or "你是誰" in user_message:
             await line_bot_api.reply_message(
                 event.reply_token,
@@ -139,72 +160,21 @@ async def handle_callback(request: Request):
             )
             continue
 
-        if user_message == "門診表":
-            user_state[user_id] = "querying_doctor"
-            await line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="您要查詢哪位醫師的門診時間表？")
-            )
-            continue
+        # Search the hospital website based on user_message
+        search_results = await search_hospital_website(user_message)
 
-        if user_message == "衛教":
-            user_state[user_id] = "querying_education"
-            await line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="您要查詢哪方面的衛教？")
-            )
-            continue
+        if search_results:
+            result_text = "\n".join(search_results)
+            response_text = f"以下是與您的問題相關的資訊：\n\n{result_text}\n\n詳情請見網址：https://www1.cch.org.tw/opd/Service-e.aspx"
+        else:
+            response_text = "未能找到與您的問題相關的資訊，請換一個問題再試。"
 
-        if user_id in user_state:
-            if user_state[user_id] == "querying_doctor":
-                del user_state[user_id]
-                search_results = await search_website("https://www1.cch.org.tw/opd/Service-e.aspx", user_message)
-                if search_results:
-                    result_text = "\n".join(search_results[:5])  # limit to 5 results
-                    response_text = f"以下是與您查詢的醫師門診時間表相關的資訊：\n\n{result_text}\n\n詳情請見網址：https://www1.cch.org.tw/opd/Service-e.aspx"
-                else:
-                    response_text = "未能找到與您查詢的醫師門診時間表相關的資訊，請換一個醫師姓名再試。"
-                await line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text=response_text)
-                )
-                continue
-
-            if user_state[user_id] == "querying_education":
-                del user_state[user_id]
-                search_results = await search_website("https://www.cch.org.tw/knowledge.aspx?pID=1", user_message)
-                if search_results:
-                    result_text = "\n".join(search_results[:5])  # limit to 5 results
-                    response_text = f"以下是與您查詢的衛教相關的資訊：\n\n{result_text}\n\n詳情請見網址：https://www.cch.org.tw/knowledge.aspx?pID=1"
-                else:
-                    response_text = "未能找到與您查詢的衛教相關的資訊，請換一個關鍵字再試。"
-                await line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text=response_text)
-                )
-                continue
-
-        classification_response = call_openai_chat_api(user_message, is_classification=True)
-
-        if "non-relevant" in classification_response.lower():
-            await line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="您的問題已經超出我的功能，我無法進行回覆，請重新提出您的問題。")
-            )
-            continue
-
-        result = call_openai_chat_api(user_message)
-
+        # Increment user's message count
         user_message_counts[user_id]['count'] += 1
 
         await line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text=result)
+            TextSendMessage(text=response_text)
         )
 
     return 'OK'
-
-# Close aiohttp session when the application stops
-@app.on_event("shutdown")
-async def shutdown_event():
-    await session.close()
