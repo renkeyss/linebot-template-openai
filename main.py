@@ -1,17 +1,5 @@
 # -*- coding: utf-8 -*-
 
-# Licensed under the Apache License, Version 2.0 (the "License"); you may
-# not use this file except in compliance with the License. You may obtain
-# a copy of the License at
-#
-# https://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-# License for the specific language governing permissions and limitations
-# under the License.
-
 import openai
 import os
 import sys
@@ -31,6 +19,8 @@ from linebot.models import (
 from dotenv import load_dotenv, find_dotenv
 _ = load_dotenv(find_dotenv())  # read local .env file
 
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
 # Dictionary to store user message counts and reset times
 user_message_counts = {}
 
@@ -43,34 +33,23 @@ def reset_user_count(user_id):
         'reset_time': datetime.now() + timedelta(days=1)
     }
 
-# Initialize OpenAI API
+# Initialize OpenAI API key
+openai.api_key = os.getenv('OPENAI_API_KEY', None)
 
-def call_openai_chat_api(user_message, is_classification=False):
-    openai.api_key = os.getenv('OPENAI_API_KEY', None)
+def call_openai_assistant_api(user_message):
+    assistant_id = "asst_HVKXE6R3ZcGb6oW6fDEpbdOi"  # Your Assistant ID
     
-    if is_classification:
-        # Use a special prompt for classification
-        prompt = (
-            "Classify the following message as relevant or non-relevant "
-            "to medical, endocrinology, medications, medical quality, or patient safety:\n\n"
-            f"{user_message}"
-        )
-        messages = [
-            {"role": "system", "content": "你是一個樂於助人的助手。"},
-            {"role": "user", "content": prompt},
-        ]
-    else:
-        messages = [
-            {"role": "system", "content": "你是一個樂於助人的助手。請使用繁體中文回覆。"},
-            {"role": "user", "content": user_message},
-        ]
+    messages = [
+        {"role": "system", "content": f"Assistant ID: {assistant_id}. 你是一個樂於助人的助手，請使用繁體中文回覆。"},
+        {"role": "user", "content": user_message},
+    ]
 
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages=messages
     )
 
-    return response.choices[0].message['content']
+    return response.choices[0]['message']['content']
 
 # Get channel_secret and channel_access_token from your environment variable
 channel_secret = os.getenv('ChannelSecret', None)
@@ -140,18 +119,8 @@ async def handle_callback(request: Request):
             )
             continue
 
-        # Classify the message
-        classification_response = call_openai_chat_api(user_message, is_classification=True)
-
-        # Check if the classification is not relevant
-        if "non-relevant" in classification_response.lower():
-            await line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="您的問題已經超出我的功能，我無法進行回覆，請重新提出您的問題。")
-            )
-            continue
-
-        result = call_openai_chat_api(user_message)
+        # Call the OpenAI Assistant API with the user's message
+        result = call_openai_assistant_api(user_message)
 
         # Increment user's message count
         user_message_counts[user_id]['count'] += 1
@@ -162,4 +131,3 @@ async def handle_callback(request: Request):
         )
 
     return 'OK'
-```
