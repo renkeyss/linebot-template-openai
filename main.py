@@ -91,7 +91,7 @@ parser = WebhookParser(channel_secret)
 
 # Introduction message
 introduction_message = (
-    "我是彰化基督教醫院 內分泌科小助理，您有任何關於疾病、藥品、內分泌、醫療、病人安全及醫療品質的相關問題都可以問我。"
+    "我是彰化基督教醫院 內分泌科小助理，您有任何關於糖尿病的相關問題都可以問我。"
 )
 
 @app.post("/callback")
@@ -126,7 +126,7 @@ async def handle_callback(request: Request):
         if user_message_counts[user_id]['count'] >= USER_DAILY_LIMIT:
             await line_bot_api.reply_message(
                 event.reply_token,
-                TextSendMessage(text="您今天的用量已經超過，請明天再詢問。")
+                TextSendMessage(text="您目前的使用量已用完，請明天再詢問，如有任何問題請致電 04-7238595 分機 3239 我們將有專人為您服務。")
             )
             continue
 
