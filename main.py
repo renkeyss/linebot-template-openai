@@ -39,13 +39,56 @@ def reset_user_count(user_id):
         'reset_time': datetime.now() + timedelta(days=1)
     }
 
+# 查詢 OpenAI Storage Vector Store
+def search_vector_store(query):
+    vector_store_id = 'vs_O4EC1xmZuHy3WiSlcmklQgsR'  # Vector Store ID
+    api_key = os.getenv('OPENAI_API_KEY', None)
+    
+    if not api_key:
+        logger.error("API key is not set")
+        return None
+
+    url = f"https://api.openai.com/v1/engines/davinci-codex/queries"  # 假設是查詢Endpoint，請根據實際文檔確認
+    
+    payload = {
+        "query": query,
+        "vector_store_id": vector_store_id
+    }
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    logger.info(f"Sending request to Vector Store with query: {query}")
+    
+    response = requests.post(url, json=payload, headers=headers)
+    
+    if response.status_code == 200:
+        return response.json()  # 假設回應返回 JSON
+    else:
+        logger.error(f"Error: Failed to search Vector Store, HTTP code: {response.status_code}, error info: {response.text}")
+        return None
+
 # 呼叫 OpenAI Chat API
 async def call_openai_chat_api(user_message):
     openai.api_key = os.getenv('OPENAI_API_KEY', None)
     
     assistant_id = 'asst_HVKXE6R3ZcGb6oW6fDEpbdOi'  # 指定助手 ID
-    knowledge_base_id = 'vs_O4EC1xmZuHy3WiSlcmklQgsR'  # 指定知識庫 ID
+
+    #首先檢查知識庫
+    vector_store_response = search_vector_store(user_message)
+    knowledge_content = ""
     
+    if vector_store_response and "results" in vector_store_response:
+        knowledge_items = vector_store_response["results"]
+        if knowledge_items:
+            # 整合知識庫資料
+            knowledge_content = "\n".join(item['content'] for item in knowledge_items)
+    
+    # 組合最終訊息
+    user_message = f"{user_message}\n相關知識庫資料：\n{knowledge_content}" if knowledge_content else user_message
+
     try:
         response = await openai.ChatCompletion.acreate(
             model="gpt-3.5-turbo",
@@ -54,9 +97,6 @@ async def call_openai_chat_api(user_message):
                 {"role": "user", "content": user_message}
             ]
         )
-        # 如果需要使用知識庫的功能需要在這裡增加查詢知識庫的邏輯
-        # 這個部分基於具體需求，是否查詢知識庫或是如何查詢還沒有包含
-
         return response.choices[0]['message']['content']
     except Exception as e:
         logger.error(f"Error calling OpenAI assistant: {e}")
