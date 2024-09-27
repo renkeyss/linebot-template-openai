@@ -1,10 +1,21 @@
 # -*- coding: utf-8 -*-
 
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain
+# a copy of the License at
+#
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+
 import openai
 import os
 import sys
 import aiohttp
-import requests
 from datetime import datetime, timedelta
 from fastapi import Request, FastAPI, HTTPException
 from linebot import (
@@ -18,13 +29,6 @@ from linebot.models import (
     MessageEvent, TextMessage, TextSendMessage,
 )
 from dotenv import load_dotenv, find_dotenv
-import logging
-
-# 設置日誌紀錄
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# 讀取環境變數
 _ = load_dotenv(find_dotenv())  # read local .env file
 
 # Dictionary to store user message counts and reset times
@@ -39,79 +43,28 @@ def reset_user_count(user_id):
         'reset_time': datetime.now() + timedelta(days=1)
     }
 
-# 檢索 Vector store 的函式
-def search_file_store(query, file_id):
-    api_key = os.getenv('OPENAI_API_KEY', None)
-    if not api_key:
-        logger.error("API key is not set")
-        return None
+# Initialize OpenAI API
 
-    url = f"https://api.openai.com/v1/files/{file_id}/search"
-    
-    payload = {
-        "query": query,
-    }
-    
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-
-    logger.info(f"Sending request to File store with query: {query}")
-    
-    response = requests.post(url, json=payload, headers=headers)
-    
-    if response.status_code == 200:
-        return response.json()  # 假設回應返回 JSON
-    else:
-        logger.error(f"Error: Failed to search File store, HTTP code: {response.status_code}, error info: {response.text}")
-        return None
-
-# 呼叫 OpenAI 助手
-async def call_openai_assistant(user_message, assistant_id):
-    api_key = os.getenv('OPENAI_API_KEY', None)
-    if not api_key:
-        logger.error("API key is not set")
-        return "API key is not set."
-
-    url = f"https://api.openai.com/v1/assistants/{assistant_id}/messages"
-    
-    payload = {
-        "input": user_message
-    }
-    
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-
-    logger.info(f"Sending request to OpenAI assistant with input: {user_message}")
-    
-    response = requests.post(url, json=payload, headers=headers)
-    
-    if response.status_code == 200:
-        response_data = response.json()
-        logger.info(f"OpenAI assistant response: {response_data}")
-        return response_data['choices'][0]['message']['content']  # 假設回應返回 JSON
-    else:
-        logger.error(f"Error: Failed to call OpenAI assistant, HTTP code: {response.status_code}, error info: {response.text}")
-        return f"Error: Failed to call OpenAI assistant. HTTP code: {response.status_code}, error info: {response.text}"
-
-# 初始化 OpenAI API
-async def call_openai_chat_api(user_message, is_classification=False):
+def call_openai_assistant_api(user_message):
     openai.api_key = os.getenv('OPENAI_API_KEY', None)
-    assistant_id = 'asst_ShZXAJwKlokkj9rNhRi2f6pG'
     
-    return await call_openai_assistant(user_message, assistant_id)
+    response = openai.Completion.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "assistant", "id": "asst_HVKXE6R3ZcGb6oW6fDEpbdOi", "content": user_message},
+        ]
+    )
+
+    return response.choices[0].message['content']
 
 # Get channel_secret and channel_access_token from your environment variable
 channel_secret = os.getenv('ChannelSecret', None)
 channel_access_token = os.getenv('ChannelAccessToken', None)
 if channel_secret is None:
-    logger.error('Specify LINE_CHANNEL_SECRET as environment variable.')
+    print('Specify LINE_CHANNEL_SECRET as environment variable.')
     sys.exit(1)
 if channel_access_token is None:
-    logger.error('Specify LINE_CHANNEL_ACCESS_TOKEN as environment variable.')
+    print('Specify LINE_CHANNEL_ACCESS_TOKEN as environment variable.')
     sys.exit(1)
 
 # Initialize LINE Bot Messaging API
@@ -132,44 +85,39 @@ async def handle_callback(request: Request):
 
     # get request body as text
     body = await request.body()
-    logger.info(f"Request body: {body.decode()}")
     body = body.decode()
 
     try:
         events = parser.parse(body, signature)
     except InvalidSignatureError:
-        logger.error("Invalid signature")
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     for event in events:
-        # 檢查事件是否為 MessageEvent 並確定位訊息類型
         if not isinstance(event, MessageEvent):
             continue
         if not isinstance(event.message, TextMessage):
             continue
 
         user_id = event.source.user_id
-        user_message = event.message.text
 
-        logger.info(f"Received message from user {user_id}: {user_message}")
-
-        # 檢查訊息計數是否需要重置
+        # Check if user_ids's count is to be reset
         if user_id in user_message_counts:
             if datetime.now() >= user_message_counts[user_id]['reset_time']:
                 reset_user_count(user_id)
         else:
             reset_user_count(user_id)
 
-        # 檢查用戶是否超過每日限制
+        # Check if user exceeded daily limit
         if user_message_counts[user_id]['count'] >= USER_DAILY_LIMIT:
-            logger.info(f"User {user_id} exceeded daily limit")
             await line_bot_api.reply_message(
                 event.reply_token,
                 TextSendMessage(text="您今天的用量已經超過，請明天再詢問。")
             )
             continue
 
-        # 處理特殊請求（如介紹）
+        user_message = event.message.text
+
+        # Check if the user is asking for an introduction
         if "介紹" in user_message or "你是誰" in user_message:
             await line_bot_api.reply_message(
                 event.reply_token,
@@ -177,21 +125,15 @@ async def handle_callback(request: Request):
             )
             continue
 
-        # 呼叫 OpenAI 助手（或執行其他操作）
-        try:
-            result_text = await call_openai_chat_api(user_message)
-            logger.info(f"OpenAI assistant response: {result_text}")
-        except Exception as e:
-            logger.error(f"Error calling OpenAI assistant: {e}")
-            result_text = "Error: 系統出現錯誤，請稍後再試。"
+        # Call the OpenAI Assistant API with the user's message
+        result = call_openai_assistant_api(user_message)
 
-        # 更新用戶訊息計數
+        # Increment user's message count
         user_message_counts[user_id]['count'] += 1
 
-        # 回應用戶訊息
         await line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text=result_text)
+            TextSendMessage(text=result)
         )
 
     return 'OK'
