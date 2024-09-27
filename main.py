@@ -39,8 +39,15 @@ user_message_counts = {}
 # User daily limit
 USER_DAILY_LIMIT = 5
 
-# Vector Store for Endocrinology Scientists ID
-VECTOR_STORE_ID = 'vs_G4UCAxMLaXFL4WcwwtUjcJqg'
+# 調用 OpenAI 的接口，使用特定的助手 ID
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "您正在和彰化基督教醫院 內分泌科小助理對話。"},
+                    {"role": "system", "content": "CCHDM"},
+                    {"role": "user", "content": event.message.text}
+                ]
+            )
 
 def reset_user_count(user_id):
     user_message_counts[user_id] = {
