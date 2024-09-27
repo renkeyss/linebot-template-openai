@@ -16,6 +16,7 @@ import openai
 import os
 import sys
 import json
+from datetime import datetime, timedelta
 
 import aiohttp
 
@@ -34,6 +35,18 @@ from linebot.models import (
 from dotenv import load_dotenv, find_dotenv
 _ = load_dotenv(find_dotenv())  # read local .env file
 
+# Dictionary to store user message counts and reset times
+# In production, replace this with a persistent datastore like a database
+user_message_counts = {}
+
+# User daily limit
+USER_DAILY_LIMIT = 5
+
+def reset_user_count(user_id):
+    user_message_counts[user_id] = {
+        'count': 0,
+        'reset_time': datetime.now() + timedelta(days=1)
+    }
 
 # Initialize OpenAI API
 
@@ -88,7 +101,27 @@ async def handle_callback(request: Request):
         if not isinstance(event.message, TextMessage):
             continue
 
+        user_id = event.source.user_id
+
+        # Check if user_ids's count is to be reset
+        if user_id in user_message_counts:
+            if datetime.now() >= user_message_counts[user_id]['reset_time']:
+                reset_user_count(user_id)
+        else:
+            reset_user_count(user_id)
+
+        # Check if user exceeded daily limit
+        if user_message_counts[user_id]['count'] >= USER_DAILY_LIMIT:
+            await line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="You have reached your daily limit of 5 questions.")
+            )
+            continue
+
         result = call_openai_chat_api(event.message.text)
+
+        # Increment user's message count
+        user_message_counts[user_id]['count'] += 1
 
         await line_bot_api.reply_message(
             event.reply_token,
