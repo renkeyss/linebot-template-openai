@@ -41,7 +41,6 @@ def reset_user_count(user_id):
 
 # 查詢 OpenAI Storage Vector Store
 def search_vector_store(query):
-    
     vector_store_id = 'vs_O4EC1xmZuHy3WiSlcmklQgsR'  # Vector Store ID
     api_key = os.getenv('OPENAI_API_KEY', None)
     
@@ -49,11 +48,10 @@ def search_vector_store(query):
         logger.error("API key is not set")
         return None
 
-    url = f"https://api.openai.com/v1/vector_stores/{vs_O4EC1xmZuHy3WiSlcmklQgsR}"  # 假設是查詢Endpoint，請根據實際文檔確認
+    url = f"https://api.openai.com/v1/vector_stores/{vector_store_id}/query"
     
     payload = {
-        "query": query,
-        "vector_store_id": vector_store_id
+        "query": query
     }
     
     headers = {
