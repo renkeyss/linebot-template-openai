@@ -1,3 +1,4 @@
+
 # -*- coding: utf-8 -*-
 
 #  Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -29,6 +30,7 @@ from linebot.models import (
     MessageEvent, TextMessage, TextSendMessage,
 )
 from dotenv import load_dotenv, find_dotenv
+
 _ = load_dotenv(find_dotenv())  # read local .env file
 
 # Dictionary to store user message counts and reset times
@@ -36,6 +38,9 @@ user_message_counts = {}
 
 # User daily limit
 USER_DAILY_LIMIT = 5
+
+# Vector Store for Endocrinology Scientists ID
+VECTOR_STORE_ID = 'vs_G4UCAxMLaXFL4WcwwtUjcJqg'
 
 def reset_user_count(user_id):
     user_message_counts[user_id] = {
@@ -71,6 +76,15 @@ def call_openai_chat_api(user_message, is_classification=False):
     )
 
     return response.choices[0].message['content']
+
+def call_vector_search_api(query):
+    openai.api_key = os.getenv('OPENAI_API_KEY', None)
+    
+    response = openai.Engine(id=VECTOR_STORE_ID).search(
+        documents=[query]
+    )
+    
+    return response['data'][0]['text'] if response['data'] else "對不起，我無法找到相關資訊。"
 
 # Get channel_secret and channel_access_token from your environment variable
 channel_secret = os.getenv('ChannelSecret', None)
@@ -132,18 +146,7 @@ async def handle_callback(request: Request):
 
         user_message = event.message.text
 
-        # Classify the message
-        classification_response = call_openai_chat_api(user_message, is_classification=True)
-
-        # Check if the classification is not relevant
-        if "non-relevant" in classification_response.lower():
-            await line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="您的問題已經超出我的功能，我無法進行回覆，請重新提出您的問題。")
-            )
-            continue
-
-        # Send the introduction message if the user asks for an introduction
+        # Check if the user is asking for an introduction
         if "介紹" in user_message or "你是誰" in user_message:
             await line_bot_api.reply_message(
                 event.reply_token,
@@ -151,7 +154,19 @@ async def handle_callback(request: Request):
             )
             continue
 
-        result = call_openai_chat_api(user_message)
+        # Classify the message
+        classification_response = call_openai_chat_api(user_message, is_classification=True)
+
+        # Check if the classification is non-relevant
+        if "non-relevant" in classification_response.lower():
+            await line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="您的問題已經超出我的功能，我無法進行回覆，請重新提出您的問題。")
+            )
+            continue
+
+        # Use vector store for endocrinology-related queries
+        result = call_vector_search_api(user_message)
 
         # Increment user's message count
         user_message_counts[user_id]['count'] += 1
