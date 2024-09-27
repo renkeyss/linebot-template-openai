@@ -181,8 +181,8 @@ async def handle_callback(request: Request):
         # Check user state for detailed queries
         if user_id in user_state:
             if user_state[user_id] == "querying_doctor":
-                search_results = await search_website("https://www1.cch.org.tw/opd/Service-e.aspx", user_message)
                 del user_state[user_id]
+                search_results = await search_website("https://www1.cch.org.tw/opd/Service-e.aspx", user_message)
                 if search_results:
                     result_text = "\n".join(search_results)
                     response_text = f"以下是與您查詢的醫師門診時間表相關的資訊：\n\n{result_text}\n\n詳情請見網址：https://www1.cch.org.tw/opd/Service-e.aspx"
@@ -195,8 +195,8 @@ async def handle_callback(request: Request):
                 continue
 
             if user_state[user_id] == "querying_education":
-                search_results = await search_website("https://www.cch.org.tw/knowledge.aspx?pID=1", user_message)
                 del user_state[user_id]
+                search_results = await search_website("https://www.cch.org.tw/knowledge.aspx?pID=1", user_message)
                 if search_results:
                     result_text = "\n".join(search_results)
                     response_text = f"以下是與您查詢的衛教相關的資訊：\n\n{result_text}\n\n詳情請見網址：https://www.cch.org.tw/knowledge.aspx?pID=1"
