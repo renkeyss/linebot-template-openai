@@ -29,6 +29,7 @@ from linebot.models import (
     MessageEvent, TextMessage, TextSendMessage,
 )
 from dotenv import load_dotenv, find_dotenv
+
 _ = load_dotenv(find_dotenv())  # read local .env file
 
 # Dictionary to store user message counts and reset times
@@ -36,6 +37,9 @@ user_message_counts = {}
 
 # User daily limit
 USER_DAILY_LIMIT = 5
+
+# Vector Store for Endocrinology Scientists ID
+VECTOR_STORE_ID = 'vs_G4UCAxMLaXFL4WcwwtUjcJqg'
 
 def reset_user_count(user_id):
     user_message_counts[user_id] = {
@@ -47,7 +51,7 @@ def reset_user_count(user_id):
 
 def call_openai_chat_api(user_message, is_classification=False):
     openai.api_key = os.getenv('OPENAI_API_KEY', None)
-    
+
     if is_classification:
         # Use a special prompt for classification
         prompt = (
@@ -71,6 +75,15 @@ def call_openai_chat_api(user_message, is_classification=False):
     )
 
     return response.choices[0].message['content']
+
+def call_vector_search_api(query):
+    openai.api_key = os.getenv('OPENAI_API_KEY', None)
+    
+    response = openai.Engine(id=VECTOR_STORE_ID).search(
+        documents=[query]
+    )
+
+    return response['data'][0]['text']
 
 # Get channel_secret and channel_access_token from your environment variable
 channel_secret = os.getenv('ChannelSecret', None)
@@ -132,6 +145,14 @@ async def handle_callback(request: Request):
 
         user_message = event.message.text
 
+        # Check if the user is asking for an introduction
+        if "介紹" in user_message or "你是誰" in user_message:
+            await line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=introduction_message)
+            )
+            continue
+
         # Classify the message
         classification_response = call_openai_chat_api(user_message, is_classification=True)
 
@@ -143,15 +164,8 @@ async def handle_callback(request: Request):
             )
             continue
 
-        # Send the introduction message if the user asks for an introduction
-        if "介紹" in user_message or "你是誰" in user_message:
-            await line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text=introduction_message)
-            )
-            continue
-
-        result = call_openai_chat_api(user_message)
+        # Use vector store for endocrinology-related queries
+        result = call_vector_search_api(user_message)
 
         # Increment user's message count
         user_message_counts[user_id]['count'] += 1
