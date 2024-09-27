@@ -42,7 +42,7 @@ def reset_user_count(user_id):
 # 查詢 OpenAI Storage Vector Store
 def search_vector_store(query):
     vector_store_id = 'vs_O4EC1xmZuHy3WiSlcmklQgsR'  # Vector Store ID
-    api_key = os.getenv('OPENAI_API_KEY', None)
+    api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
     
     if not api_key:
         logger.error("API key is not set")
@@ -65,6 +65,7 @@ def search_vector_store(query):
     response = requests.post(url, json=payload, headers=headers)
     
     if response.status_code == 200:
+        logger.info(f"Response from Vector Store: {response.json()}")
         return response.json()  # 假設回應返回 JSON
     else:
         logger.error(f"Error: Failed to search Vector Store, HTTP code: {response.status_code}, error info: {response.text}")
@@ -72,7 +73,7 @@ def search_vector_store(query):
 
 # 呼叫 OpenAI Chat API
 async def call_openai_chat_api(user_message):
-    openai.api_key = os.getenv('OPENAI_API_KEY', None)
+    openai.api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
     
     assistant_id = 'asst_HVKXE6R3ZcGb6oW6fDEpbdOi'  # 指定助手 ID
 
@@ -97,12 +98,13 @@ async def call_openai_chat_api(user_message):
                 {"role": "user", "content": user_message}
             ]
         )
+        logger.info(f"Response from OpenAI assistant: {response.choices[0]['message']['content']}")
         return response.choices[0]['message']['content']
     except Exception as e:
         logger.error(f"Error calling OpenAI assistant: {e}")
         return "Error: 系統出現錯誤，請稍後再試。"
 
-# Get channel_secret and channel_access_token from your environment variable
+# 獲取 channel_secret 和 channel_access_token
 channel_secret = os.getenv('ChannelSecret', None)
 channel_access_token = os.getenv('ChannelAccessToken', None)
 if channel_secret is None:
