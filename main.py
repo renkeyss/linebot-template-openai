@@ -4,6 +4,7 @@ import openai
 import os
 import sys
 import aiohttp
+import requests
 from datetime import datetime, timedelta
 from fastapi import Request, FastAPI, HTTPException
 from linebot import (
@@ -17,7 +18,13 @@ from linebot.models import (
     MessageEvent, TextMessage, TextSendMessage,
 )
 from dotenv import load_dotenv, find_dotenv
+import logging
+
 _ = load_dotenv(find_dotenv())  # read local .env file
+
+# 設置日誌紀錄
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Dictionary to store user message counts and reset times
 user_message_counts = {}
@@ -31,32 +38,77 @@ def reset_user_count(user_id):
         'reset_time': datetime.now() + timedelta(days=1)
     }
 
-# Initialize OpenAI API key
-openai.api_key = os.getenv('OPENAI_API_KEY', None)
+# 檢索 Vector store 的函式
+def search_file_store(query, file_id):
+    api_key = os.getenv('OPENAI_API_KEY', None)
+    if not api_key:
+        logger.error("API key is not set")
+        return None
 
-def call_openai_assistant_api(user_message):
-    assistant_id = "asst_HVKXE6R3ZcGb6oW6fDEpbdOi"  # Your Assistant ID
+    url = f"https://api.openai.com/v1/files/{file_id}/search"
     
-    messages = [
-        {"role": "system", "content": f"Assistant ID: {assistant_id}. 你是一個樂於助人的助手，請使用繁體中文回覆。"},
-        {"role": "user", "content": user_message},
-    ]
+    payload = {
+        "query": query,
+    }
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
 
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=messages
-    )
+    logger.info(f"Sending request to File store with query: {query}")
+    
+    response = requests.post(url, json=payload, headers=headers)
+    
+    if response.status_code == 200:
+        return response.json()  # 假設回應返回 JSON
+    else:
+        logger.error(f"Error: Failed to search File store, HTTP code: {response.status_code}, error info: {response.text}")
+        return None
 
-    return response.choices[0]['message']['content']
+# 呼叫 OpenAI 助手
+async def call_openai_assistant(user_message, assistant_id):
+    api_key = os.getenv('OPENAI_API_KEY', None)
+    if not api_key:
+        logger.error("API key is not set")
+        return "API key is not set."
+
+    url = f"https://api.openai.com/v1/assistants/{assistant_id}/messages"
+    
+    payload = {
+        "input": user_message
+    }
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    logger.info(f"Sending request to OpenAI assistant with input: {user_message}")
+    
+    response = requests.post(url, json=payload, headers=headers)
+    
+    if response.status_code == 200:
+        return response.json()['choices'][0]['message']['content']  # 假設回應返回 JSON
+    else:
+        logger.error(f"Error: Failed to call OpenAI assistant, HTTP code: {response.status_code}, error info: {response.text}")
+        return "Error: Failed to call OpenAI assistant."
+
+# 初始化 OpenAI API
+async def call_openai_chat_api(user_message, is_classification=False):
+    openai.api_key = os.getenv('OPENAI_API_KEY', None)
+    assistant_id = 'asst_ShZXAJwKlokkj9rNhRi2f6pG'
+    
+    return await call_openai_assistant(user_message, assistant_id)
 
 # Get channel_secret and channel_access_token from your environment variable
 channel_secret = os.getenv('ChannelSecret', None)
 channel_access_token = os.getenv('ChannelAccessToken', None)
 if channel_secret is None:
-    print('Specify LINE_CHANNEL_SECRET as environment variable.')
+    logger.error('Specify LINE_CHANNEL_SECRET as environment variable.')
     sys.exit(1)
 if channel_access_token is None:
-    print('Specify LINE_CHANNEL_ACCESS_TOKEN as environment variable.')
+    logger.error('Specify LINE_CHANNEL_ACCESS_TOKEN as environment variable.')
     sys.exit(1)
 
 # Initialize LINE Bot Messaging API
@@ -77,11 +129,13 @@ async def handle_callback(request: Request):
 
     # get request body as text
     body = await request.body()
+    logger.info(f"Request body: {body.decode()}")
     body = body.decode()
 
     try:
         events = parser.parse(body, signature)
     except InvalidSignatureError:
+        logger.error("Invalid signature")
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     for event in events:
@@ -92,6 +146,8 @@ async def handle_callback(request: Request):
 
         user_id = event.source.user_id
 
+        logger.info(f"Received message from user {user_id}")
+
         # Check if user_ids's count is to be reset
         if user_id in user_message_counts:
             if datetime.now() >= user_message_counts[user_id]['reset_time']:
@@ -101,6 +157,7 @@ async def handle_callback(request: Request):
 
         # Check if user exceeded daily limit
         if user_message_counts[user_id]['count'] >= USER_DAILY_LIMIT:
+            logger.info(f"User {user_id} exceeded daily limit")
             await line_bot_api.reply_message(
                 event.reply_token,
                 TextSendMessage(text="您今天的用量已經超過，請明天再詢問。")
@@ -117,15 +174,47 @@ async def handle_callback(request: Request):
             )
             continue
 
-        # Call the OpenAI Assistant API with the user's message
-        result = call_openai_assistant_api(user_message)
+        # Classify the message
+        try:
+            classification_response = await call_openai_chat_api(user_message, is_classification=True)
+            logger.info(f"Classification response: {classification_response}")
+        except Exception as e:
+            logger.error(f"Error calling classification API: {e}")
+            await line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="系統出現錯誤，請稍後再試。")
+            )
+            continue
+
+        # Check if the classification is not relevant
+        if "non-relevant" in classification_response.lower():
+            await line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="您的問題已經超出我的功能，我無法進行回覆，請重新提出您的問題。")
+            )
+            continue
+
+        # 在此處調用 File store 檢索函式
+        file_id = "file-BElA7yaA2ddwnGd2AoF4orX0"
+        try:
+            search_result = search_file_store(user_message, file_id)
+            logger.info(f"File store search result: {search_result}")
+        except Exception as e:
+            logger.error(f"Error searching file store: {e}")
+            search_result = None
+        
+        if search_result and search_result.get("results"):
+            # 根據您預期的結構處理 search_result
+            result_text = "\n".join([res["text"] for res in search_result["results"]])
+        else:
+            result_text = await call_openai_chat_api(user_message)
 
         # Increment user's message count
         user_message_counts[user_id]['count'] += 1
 
         await line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text=result)
+            TextSendMessage(text=result_text)
         )
 
     return 'OK'
