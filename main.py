@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
+
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
+#
 # https://www.apache.org/licenses/LICENSE-2.0
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -26,8 +29,6 @@ from linebot.models import (
     MessageEvent, TextMessage, TextSendMessage,
 )
 from dotenv import load_dotenv, find_dotenv
-from bs4 import BeautifulSoup
-
 _ = load_dotenv(find_dotenv())  # read local .env file
 
 # Dictionary to store user message counts and reset times
@@ -43,6 +44,7 @@ def reset_user_count(user_id):
     }
 
 # Initialize OpenAI API
+
 def call_openai_chat_api(user_message, is_classification=False):
     openai.api_key = os.getenv('OPENAI_API_KEY', None)
     
@@ -69,28 +71,6 @@ def call_openai_chat_api(user_message, is_classification=False):
     )
 
     return response.choices[0].message['content']
-
-# Fetch and search information from the hospital website
-async def search_hospital_website(query):
-    url = "https://www1.cch.org.tw/opd/Service-e.aspx"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            if response.status != 200:
-                raise HTTPException(
-                    status_code=response.status,
-                    detail="Failed to fetch hospital website"
-                )
-            page_content = await response.text()
-
-    soup = BeautifulSoup(page_content, 'html.parser')
-    
-    # Assuming the relevant information is in text/plain format or within tags
-    search_results = []
-    for elem in soup.find_all(text=True):
-        if query in elem:
-            search_results.append(elem.strip())
-
-    return search_results
 
 # Get channel_secret and channel_access_token from your environment variable
 channel_secret = os.getenv('ChannelSecret', None)
@@ -160,21 +140,25 @@ async def handle_callback(request: Request):
             )
             continue
 
-        # Search the hospital website based on user_message
-        search_results = await search_hospital_website(user_message)
+        # Classify the message
+        classification_response = call_openai_chat_api(user_message, is_classification=True)
 
-        if search_results:
-            result_text = "\n".join(search_results)
-            response_text = f"以下是與您的問題相關的資訊：\n\n{result_text}\n\n詳情請見網址：https://www1.cch.org.tw/opd/Service-e.aspx"
-        else:
-            response_text = "未能找到與您的問題相關的資訊，請換一個問題再試。"
+        # Check if the classification is not relevant
+        if "non-relevant" in classification_response.lower():
+            await line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="您的問題已經超出我的功能，我無法進行回覆，請重新提出您的問題。")
+            )
+            continue
+
+        result = call_openai_chat_api(user_message)
 
         # Increment user's message count
         user_message_counts[user_id]['count'] += 1
 
         await line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text=response_text)
+            TextSendMessage(text=result)
         )
 
     return 'OK'
