@@ -1,21 +1,8 @@
-# -*- coding: utf-8 -*-
-
-# Licensed under the Apache License, Version 2.0 (the "License"); you may
-# not use this file except in compliance with the License. You may obtain
-# a copy of the License at
-#
-# https://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-# License for the specific language governing permissions and limitations
-# under the License.
-
 import openai
 import os
 import sys
 import aiohttp
+import requests
 from datetime import datetime, timedelta
 from fastapi import Request, FastAPI, HTTPException
 from linebot import (
@@ -35,7 +22,7 @@ _ = load_dotenv(find_dotenv())  # read local .env file
 user_message_counts = {}
 
 # User daily limit
-USER_DAILY_LIMIT = 10
+USER_DAILY_LIMIT = 5
 
 def reset_user_count(user_id):
     user_message_counts[user_id] = {
@@ -43,9 +30,29 @@ def reset_user_count(user_id):
         'reset_time': datetime.now() + timedelta(days=1)
     }
 
-# Initialize OpenAI API
+# 檢索 Vector store 的函式
+def search_vector_store(query, vector_store_id):
+    openai.api_key = os.getenv('OPENAI_API_KEY', None)
+    
+    url = f"https://api.openai.com/v1/vector_stores/{vector_store_id}/search"
+    
+    payload = {
+        "query": query,
+    }
+    
+    headers = {
+        "Authorization": f"Bearer {openai.api_key}",
+        "Content-Type": "application/json"
+    }
+    
+    response = requests.post(url, json=payload, headers=headers)
+    
+    if response.status_code == 200:
+        return response.json()  # 假設回應返回 JSON
+    else:
+        raise Exception(f"錯誤: 檢索 Vector store 失敗，HTTP 代碼：{response.status_code}, 錯誤信息：{response.text}")
 
-def call_openai_chat_api(user_message, is_classification=False):
+async def call_openai_chat_api(user_message, is_classification=False):
     openai.api_key = os.getenv('OPENAI_API_KEY', None)
     
     if is_classification:
@@ -141,7 +148,7 @@ async def handle_callback(request: Request):
             continue
 
         # Classify the message
-        classification_response = call_openai_chat_api(user_message, is_classification=True)
+        classification_response = await call_openai_chat_api(user_message, is_classification=True)
 
         # Check if the classification is not relevant
         if "non-relevant" in classification_response.lower():
@@ -151,7 +158,16 @@ async def handle_callback(request: Request):
             )
             continue
 
-        result = call_openai_chat_api(user_message)
+        # 在此處調用 Vector store 檢索函式
+        vector_store_id = "vs_O4EC1xmZuHy3WiSlcmklQgsR"
+        search_result = search_vector_store(user_message, vector_store_id)
+        
+        # 假設 search_result 包含您需要的更詳盡的回答資訊
+        # 在此簡化處理，只返回檢索結果的簡單文字表示
+        if search_result:
+            result = f"檢索結果: {search_result}"
+        else:
+            result = await call_openai_chat_api(user_message)
 
         # Increment user's message count
         user_message_counts[user_id]['count'] += 1
