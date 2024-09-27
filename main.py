@@ -59,7 +59,6 @@ def search_vector_store(query):
         "Content-Type": "application/json",
         "OpenAI-Beta": "assistants=v2"
     }
-
     logger.info(f"Sending request to Vector Store with query: {query}")
     
     response = requests.post(url, json=payload, headers=headers)
