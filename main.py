@@ -40,7 +40,7 @@ _ = load_dotenv(find_dotenv())  # read local .env file
 user_message_counts = {}
 
 # User daily limit
-USER_DAILY_LIMIT = 5
+USER_DAILY_LIMIT = 2
 
 def reset_user_count(user_id):
     user_message_counts[user_id] = {
