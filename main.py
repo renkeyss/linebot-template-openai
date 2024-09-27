@@ -1,11 +1,8 @@
 # -*- coding: utf-8 -*-
-
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
 # a copy of the License at
-#
 # https://www.apache.org/licenses/LICENSE-2.0
-#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -18,16 +15,10 @@ import sys
 import aiohttp
 from datetime import datetime, timedelta
 from fastapi import Request, FastAPI, HTTPException
-from linebot import (
-    AsyncLineBotApi, WebhookParser
-)
+from linebot import AsyncLineBotApi, WebhookParser
 from linebot.aiohttp_async_http_client import AiohttpAsyncHttpClient
-from linebot.exceptions import (
-    InvalidSignatureError
-)
-from linebot.models import (
-    MessageEvent, TextMessage, TextSendMessage,
-)
+from linebot.exceptions import InvalidSignatureError
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
 from dotenv import load_dotenv, find_dotenv
 _ = load_dotenv(find_dotenv())  # read local .env file
 
@@ -44,15 +35,13 @@ def reset_user_count(user_id):
     }
 
 # Initialize OpenAI API
-
 def call_openai_chat_api(user_message, is_classification=False):
     openai.api_key = os.getenv('OPENAI_API_KEY', None)
     
     if is_classification:
-        # Use a special prompt for classification
         prompt = (
             "Classify the following message as relevant or non-relevant "
-            "to disease, medications, endocrinology, healthcare, patient safety, or medical quality:\n\n"
+            "to Changhua Christian Hospital or any of its departments, services, or doctors:\n\n"
             f"{user_message}"
         )
         messages = [
@@ -91,7 +80,7 @@ parser = WebhookParser(channel_secret)
 
 # Introduction message
 introduction_message = (
-    "我是彰化基督教醫院 內分泌科小助理，您有任何關於疾病、藥品、內分泌、醫療、病人安全及醫療品質的相關問題都可以問我。"
+    "我是彰化基督教醫院 內分泌科小助理，您有任何關於彰化基督教醫院及其科別、服務、或醫師的相關問題都可以問我。"
 )
 
 @app.post("/callback")
@@ -147,14 +136,15 @@ async def handle_callback(request: Request):
         if "non-relevant" in classification_response.lower():
             await line_bot_api.reply_message(
                 event.reply_token,
-                TextSendMessage(text="您的問題已經超出我的功能，我無法進行回覆，請重新提出您的問題。")
+                TextSendMessage(text="您的問題已經超出我的功能範圍。我只能回答有關彰化基督教醫院及其科別、服務、或醫師的問題。請重新提出您的問題。")
             )
             continue
 
-        result = call_openai_chat_api(user_message)
-
-        # Increment user's message count
+        # Increase user's message count
         user_message_counts[user_id]['count'] += 1
+
+        # Get response from OpenAI
+        result = call_openai_chat_api(user_message)
 
         await line_bot_api.reply_message(
             event.reply_token,
