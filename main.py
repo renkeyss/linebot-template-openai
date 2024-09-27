@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 
-# Licensed under the Apache License, Version 2.0 (the "License"); you may
-# not use this file except in compliance with the License. You may obtain
-# a copy of the License at
+#  Licensed under the Apache License, Version 2.0 (the "License"); you may
+#  not use this file except in compliance with the License. You may obtain
+#  a copy of the License at
 #
-# https://www.apache.org/licenses/LICENSE-2.0
+#       https://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-# License for the specific language governing permissions and limitations
-# under the License.
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+#  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+#  License for the specific language governing permissions and limitations
+#  under the License.
 
 import openai
 import os
@@ -29,7 +29,6 @@ from linebot.models import (
     MessageEvent, TextMessage, TextSendMessage,
 )
 from dotenv import load_dotenv, find_dotenv
-
 _ = load_dotenv(find_dotenv())  # read local .env file
 
 # Dictionary to store user message counts and reset times
@@ -37,9 +36,6 @@ user_message_counts = {}
 
 # User daily limit
 USER_DAILY_LIMIT = 5
-
-# Vector Store for Endocrinology Scientists ID
-VECTOR_STORE_ID = 'vs_G4UCAxMLaXFL4WcwwtUjcJqg'
 
 def reset_user_count(user_id):
     user_message_counts[user_id] = {
@@ -75,26 +71,6 @@ def call_openai_chat_api(user_message, is_classification=False):
     )
 
     return response.choices[0].message['content']
-
-def call_vector_search_api(query):
-    openai.api_key = os.getenv('OPENAI_API_KEY', None)
-    
-    response = openai.Engine(id=VECTOR_STORE_ID).search(
-        documents=[query]
-    )
-
-    return response['data'][0]['document']
-
-def search_cch_website(query):
-    openai.api_key = os.getenv('OPENAI_API_KEY', None)
-    
-    response = openai.Completion.create(
-        engine="davinci",
-        prompt=f"Search the Changhua Christian Hospital website (https://www.cch.org.tw/) for the following query: {query}",
-        max_tokens=1000
-    )
-    
-    return response.choices[0].text.strip()
 
 # Get channel_secret and channel_access_token from your environment variable
 channel_secret = os.getenv('ChannelSecret', None)
@@ -156,14 +132,6 @@ async def handle_callback(request: Request):
 
         user_message = event.message.text
 
-        # Check if the user is asking for an introduction
-        if "介紹" in user_message or "你是誰" in user_message:
-            await line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text=introduction_message)
-            )
-            continue
-
         # Classify the message
         classification_response = call_openai_chat_api(user_message, is_classification=True)
 
@@ -175,14 +143,15 @@ async def handle_callback(request: Request):
             )
             continue
 
-        # Use vector store for endocrinology-related queries
-        vector_search_result = call_vector_search_api(user_message)
-        
-        # Search the Changhua Christian Hospital website for additional information
-        cch_search_result = search_cch_website(user_message)
+        # Send the introduction message if the user asks for an introduction
+        if "介紹" in user_message or "你是誰" in user_message:
+            await line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=introduction_message)
+            )
+            continue
 
-        # Combine both results
-        result = f"內分泌科 Vector Store:\n{vector_search_result}\n\nFrom Changhua Christian Hospital website:\n{cch_search_result}"
+        result = call_openai_chat_api(user_message)
 
         # Increment user's message count
         user_message_counts[user_id]['count'] += 1
