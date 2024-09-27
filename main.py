@@ -1,17 +1,5 @@
 # -*- coding: utf-8 -*-
 
-# Licensed under the Apache License, Version 2.0 (the "License"); you may
-# not use this file except in compliance with the License. You may obtain
-# a copy of the License at
-#
-# https://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-# License for the specific language governing permissions and limitations
-# under the License.
-
 import openai
 import os
 import sys
@@ -43,16 +31,20 @@ def reset_user_count(user_id):
         'reset_time': datetime.now() + timedelta(days=1)
     }
 
-# Initialize OpenAI API
+# Initialize OpenAI API key
+openai.api_key = os.getenv('OPENAI_API_KEY', None)
 
 def call_openai_assistant_api(user_message):
-    openai.api_key = os.getenv('OPENAI_API_KEY', None)
+    assistant_id = "asst_HVKXE6R3ZcGb6oW6fDEpbdOi"
     
-    response = openai.Completion.create(
+    messages = [
+        {"role": "system", "content": f"Assistant ID: {assistant_id}. 你是一個樂於助人的助手，請使用繁體中文回覆。"},
+        {"role": "user", "content": user_message},
+    ]
+
+    response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
-        messages=[
-            {"role": "assistant", "id": "asst_HVKXE6R3ZcGb6oW6fDEpbdOi", "content": user_message},
-        ]
+        messages=messages
     )
 
     return response.choices[0].message['content']
