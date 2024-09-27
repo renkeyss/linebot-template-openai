@@ -1,17 +1,17 @@
 
 # -*- coding: utf-8 -*-
 
-#  Licensed under the Apache License, Version 2.0 (the "License"); you may
-#  not use this file except in compliance with the License. You may obtain
-#  a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain
+# a copy of the License at
 #
-#       https://www.apache.org/licenses/LICENSE-2.0
+# https://www.apache.org/licenses/LICENSE-2.0
 #
-#  Unless required by applicable law or agreed to in writing, software
-#  distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-#  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-#  License for the specific language governing permissions and limitations
-#  under the License.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
 
 import openai
 import os
@@ -39,15 +39,10 @@ user_message_counts = {}
 # User daily limit
 USER_DAILY_LIMIT = 5
 
-# 調用 OpenAI 的接口，使用特定的助手 ID
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "您正在和彰化基督教醫院 內分泌科小助理對話。"},
-                    {"role": "system", "content": "CCHDM"},
-                    {"role": "user", "content": event.message.text}
-                ]
-            )
+# Vector Store for Endocrinology Scientists and Assistant details
+VECTOR_STORE_ID = 'vs_G4UCAxMLaXFL4WcwwtUjcJqg'
+ASSISTANT_ID = 'asst_ShZXAJwKlokkj9rNhRi2f6pG'
+ASSISTANT_NAME = 'CCHDM'
 
 def reset_user_count(user_id):
     user_message_counts[user_id] = {
@@ -68,12 +63,12 @@ def call_openai_chat_api(user_message, is_classification=False):
             f"{user_message}"
         )
         messages = [
-            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "system", "content": f"You are a helpful assistant named {ASSISTANT_NAME}."},
             {"role": "user", "content": prompt},
         ]
     else:
         messages = [
-            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "system", "content": f"You are a helpful assistant named {ASSISTANT_NAME}."},
             {"role": "user", "content": user_message},
         ]
 
@@ -90,8 +85,8 @@ def call_vector_search_api(query):
     response = openai.Engine(id=VECTOR_STORE_ID).search(
         documents=[query]
     )
-    
-    return response['data'][0]['text'] if response['data'] else "對不起，我無法找到相關資訊。"
+
+    return response['data'][0]['text']
 
 # Get channel_secret and channel_access_token from your environment variable
 channel_secret = os.getenv('ChannelSecret', None)
@@ -112,7 +107,8 @@ parser = WebhookParser(channel_secret)
 
 # Introduction message
 introduction_message = (
-    "我是彰化基督教醫院 內分泌科小助理，您有任何關於：糖尿病、高血壓及內分泌的相關問題都可以問我。"
+    f"我是彰化基督教醫院 內分泌科小助理 {ASSISTANT_NAME}，"
+    "您有任何關於：糖尿病、高血壓及內分泌的相關問題都可以問我。"
 )
 
 @app.post("/callback")
@@ -164,7 +160,7 @@ async def handle_callback(request: Request):
         # Classify the message
         classification_response = call_openai_chat_api(user_message, is_classification=True)
 
-        # Check if the classification is non-relevant
+        # Check if the classification is not relevant
         if "non-relevant" in classification_response.lower():
             await line_bot_api.reply_message(
                 event.reply_token,
