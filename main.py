@@ -144,7 +144,7 @@ async def handle_callback(request: Request):
 
             # 獲取 Google Drive 資料夾內容
             if "資料夾內容" in user_message:
-                folder_id = "1Thj7yNdrtoZ1NVRO7IlRSO8EfVUyKgfe"  # 硬編碼資料夾 ID
+                folder_id = "117414381559448263801"  # 硬編碼資料夾 ID
                 folder_content = await get_drive_folder_contents(folder_id)
                 result_text = f"資料夾內容：\n{folder_content}"
             else:
