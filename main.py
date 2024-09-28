@@ -52,7 +52,6 @@ def reset_user_count(user_id):
 async def get_drive_folder_contents(folder_id):
     loop = asyncio.get_event_loop()
     try:
-        # 使用非同步執行 Google Drive 查詢
         results = await loop.run_in_executor(None, lambda: drive_service.files().list(
             q=f"'{folder_id}' in parents", 
             pageSize=10, 
@@ -97,72 +96,70 @@ introduction_message = (
 
 @app.post("/callback")
 async def handle_callback(request: Request):
-    # 立即返回響應，這樣 LINE 伺服器不會超時
-    response = HTTPException(status_code=200, detail='OK')
-
-    signature = request.headers['X-Line-Signature']
-    body = await request.body()
-    logger.info(f"Request body: {body.decode()}")
-
-    # 確認簽名
     try:
+        # 立即返回響應
+        signature = request.headers['X-Line-Signature']
+        body = await request.body()
+        logger.info(f"Request body: {body.decode()}")
+
+        # 確認簽名
         events = parser.parse(body.decode(), signature)
-    except InvalidSignatureError:
-        logger.error("Invalid signature")
-        return response  # 返回響應
 
-    # 這裡的事件處理可以繼續
-    for event in events:
-        if not isinstance(event, MessageEvent):
-            continue
-        if not isinstance(event.message, TextMessage):
-            continue
+        for event in events:
+            if not isinstance(event, MessageEvent):
+                continue
+            if not isinstance(event.message, TextMessage):
+                continue
 
-        user_id = event.source.user_id
-        user_message = event.message.text
+            user_id = event.source.user_id
+            user_message = event.message.text
 
-        logger.info(f"Received message from user {user_id}: {user_message}")
+            logger.info(f"Received message from user {user_id}: {user_message}")
 
-        # 檢查訊息計數是否需要重置
-        if user_id in user_message_counts:
-            if datetime.now() >= user_message_counts[user_id]['reset_time']:
+            # 檢查訊息計數是否需要重置
+            if user_id in user_message_counts:
+                if datetime.now() >= user_message_counts[user_id]['reset_time']:
+                    reset_user_count(user_id)
+            else:
                 reset_user_count(user_id)
-        else:
-            reset_user_count(user_id)
 
-        # 檢查用戶是否超過每日限制
-        if user_message_counts[user_id]['count'] >= USER_DAILY_LIMIT:
-            logger.info(f"User {user_id} exceeded daily limit")
+            # 檢查用戶是否超過每日限制
+            if user_message_counts[user_id]['count'] >= USER_DAILY_LIMIT:
+                logger.info(f"User {user_id} exceeded daily limit")
+                await line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text="您今天的用量已經超過，請明天再詢問。")
+                )
+                continue
+
+            # 處理特殊請求（如介紹）
+            if "介紹" in user_message or "你是誰" in user_message:
+                await line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text=introduction_message)
+                )
+                continue
+
+            # 獲取 Google Drive 資料夾內容
+            if "資料夾內容" in user_message:
+                folder_id = "1Thj7yNdrtoZ1NVRO7IlRSO8EfVUyKgfe"  # 硬編碼資料夾 ID
+                folder_content = await get_drive_folder_contents(folder_id)
+                result_text = f"資料夾內容：\n{folder_content}"
+            else:
+                # 調用 OpenAI 的處理邏輯（您需要添加此函數）
+                result_text = await call_openai_chat_api(user_message)
+
+            # 更新用戶訊息計數
+            user_message_counts[user_id]['count'] += 1
+
+            # 回應用戶訊息
             await line_bot_api.reply_message(
                 event.reply_token,
-                TextSendMessage(text="您今天的用量已經超過，請明天再詢問。")
+                TextSendMessage(text=result_text)
             )
-            continue
 
-        # 處理特殊請求（如介紹）
-        if "介紹" in user_message or "你是誰" in user_message:
-            await line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text=introduction_message)
-            )
-            continue
+        return HTTPException(status_code=200, detail='OK')  # 成功回應
 
-        # 獲取 Google Drive 資料夾內容
-        if "資料夾內容" in user_message:
-            folder_id = "1Thj7yNdrtoZ1NVRO7IlRSO8EfVUyKgfe"  # 硬編碼資料夾 ID
-            folder_content = await get_drive_folder_contents(folder_id)
-            result_text = f"資料夾內容：\n{folder_content}"
-        else:
-            # 調用 OpenAI 的處理邏輯（您需要添加此函數）
-            result_text = await call_openai_chat_api(user_message)
-
-        # 更新用戶訊息計數
-        user_message_counts[user_id]['count'] += 1
-
-        # 回應用戶訊息
-        await line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(text=result_text)
-        )
-
-    return response  # 返回最終響應
+    except Exception as e:
+        logger.error(f"Error handling callback: {e}")
+        return HTTPException(status_code=500, detail='Internal Server Error')  # 返回內部伺服器錯誤響應
