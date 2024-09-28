@@ -4,6 +4,7 @@ import openai
 import os
 import sys
 import aiohttp
+import asyncio
 from datetime import datetime, timedelta
 from fastapi import Request, FastAPI, HTTPException
 from linebot import (
@@ -48,9 +49,9 @@ def reset_user_count(user_id):
 
 # 獲取 Google Drive 中的資料夾內容
 async def get_drive_folder_contents(folder_id):
+    loop = asyncio.get_event_loop()
     try:
-        query = f"'{folder_id}' in parents"
-        results = drive_service.files().list(q=query, pageSize=10, fields="files(id, name)").execute()
+        results = await loop.run_in_executor(None, lambda: drive_service.files().list(q=f"'{folder_id}' in parents", pageSize=10, fields="files(id, name)").execute())
         items = results.get('files', [])
         
         if not items:
@@ -62,12 +63,21 @@ async def get_drive_folder_contents(folder_id):
         logger.error(f"Error fetching Google Drive folder contents: {e}")
         return "無法獲取資料夾內容。"
 
-# ...其餘程式碼保持不變，以下添加 Google Drive 相關功能...
-
 # Initialize LINE Bot Messaging API
 app = FastAPI()
 session = aiohttp.ClientSession()
 async_http_client = AiohttpAsyncHttpClient(session)
+
+channel_secret = os.getenv('ChannelSecret', None)
+channel_access_token = os.getenv('ChannelAccessToken', None)
+
+if channel_secret is None:
+    logger.error('Specify LINE_CHANNEL_SECRET as environment variable.')
+    sys.exit(1)
+if channel_access_token is None:
+    logger.error('Specify LINE_CHANNEL_ACCESS_TOKEN as environment variable.')
+    sys.exit(1)
+
 line_bot_api = AsyncLineBotApi(channel_access_token, async_http_client)
 parser = WebhookParser(channel_secret)
 
@@ -78,13 +88,15 @@ introduction_message = (
 
 @app.post("/callback")
 async def handle_callback(request: Request):
+    # 立即返回響應
+    response = 'OK'
     signature = request.headers['X-Line-Signature']
     body = await request.body()
     logger.info(f"Request body: {body.decode()}")
-    body = body.decode()
-
+    
+    # 確認簽名
     try:
-        events = parser.parse(body, signature)
+        events = parser.parse(body.decode(), signature)
     except InvalidSignatureError:
         logger.error("Invalid signature")
         raise HTTPException(status_code=400, detail="Invalid signature")
@@ -130,7 +142,7 @@ async def handle_callback(request: Request):
             folder_content = await get_drive_folder_contents(folder_id)
             result_text = f"資料夾內容：\n{folder_content}"
         else:
-            # 此處保留原有的網頁檢索或 OpenAI 處理邏輯
+            # 調用 OpenAI 的處理邏輯（您需要添加此函數）
             result_text = await call_openai_chat_api(user_message)
 
         # 更新用戶訊息計數
@@ -142,4 +154,4 @@ async def handle_callback(request: Request):
             TextSendMessage(text=result_text)
         )
 
-    return 'OK'
+    return response  # 返回最終響應
