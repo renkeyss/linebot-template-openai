@@ -42,7 +42,7 @@ def reset_user_count(user_id):
 # 執行網頁檢索
 def web_search(query):
     # 這是一個簡單的示範，實際上可以使用適合的搜尋引擎 API
-    search_url = f"https://google-cch@core-appliance-436705-m8.iam.gserviceaccount.com"  # 將此替換為實際的搜尋 URL
+    search_url = f"https://www.google.com"  # 將此替換為實際的搜尋 URL
     headers = {
         "Authorization": f"Bearer {os.getenv('28c2987fb559323d9d0791cf2eeae02ecc86666e')}",  # 從環境變數獲取 API 金鑰（如果需要）
         "Content-Type": "application/json"
