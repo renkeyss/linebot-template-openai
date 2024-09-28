@@ -22,6 +22,7 @@ import logging
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 # 設置日誌紀錄
 logging.basicConfig(level=logging.INFO)
@@ -51,7 +52,12 @@ def reset_user_count(user_id):
 async def get_drive_folder_contents(folder_id):
     loop = asyncio.get_event_loop()
     try:
-        results = await loop.run_in_executor(None, lambda: drive_service.files().list(q=f"'{folder_id}' in parents", pageSize=10, fields="files(id, name)").execute())
+        # 使用非同步執行 Google Drive 查詢
+        results = await loop.run_in_executor(None, lambda: drive_service.files().list(
+            q=f"'{folder_id}' in parents", 
+            pageSize=10, 
+            fields="files(id, name)"
+        ).execute())
         items = results.get('files', [])
         
         if not items:
@@ -59,6 +65,9 @@ async def get_drive_folder_contents(folder_id):
         
         return "\n".join([f"{item['name']} (ID: {item['id']})" for item in items])
     
+    except HttpError as e:
+        logger.error(f"HTTP error fetching Google Drive folder contents: {e}")
+        return "無法獲取資料夾內容。"
     except Exception as e:
         logger.error(f"Error fetching Google Drive folder contents: {e}")
         return "無法獲取資料夾內容。"
@@ -88,19 +97,21 @@ introduction_message = (
 
 @app.post("/callback")
 async def handle_callback(request: Request):
-    # 立即返回響應
-    response = 'OK'
+    # 立即返回響應，這樣 LINE 伺服器不會超時
+    response = HTTPException(status_code=200, detail='OK')
+
     signature = request.headers['X-Line-Signature']
     body = await request.body()
     logger.info(f"Request body: {body.decode()}")
-    
+
     # 確認簽名
     try:
         events = parser.parse(body.decode(), signature)
     except InvalidSignatureError:
         logger.error("Invalid signature")
-        raise HTTPException(status_code=400, detail="Invalid signature")
+        return response  # 返回響應
 
+    # 這裡的事件處理可以繼續
     for event in events:
         if not isinstance(event, MessageEvent):
             continue
