@@ -4,7 +4,6 @@ import openai
 import os
 import sys
 import aiohttp
-import requests
 from datetime import datetime, timedelta
 from fastapi import Request, FastAPI, HTTPException
 from linebot import (
@@ -40,24 +39,25 @@ def reset_user_count(user_id):
     }
 
 # 執行網頁檢索
-def web_search(query):
-    # 這是一個簡單的示範，實際上可以使用適合的搜尋引擎 API
-    search_url = f"https://www.google.com"  # 將此替換為實際的搜尋 URL
+async def web_search(query):
+    # 將此替換為實際的搜尋引擎 API 的 URL
+    search_url = f"https://api.example.com/search?q={query}"  
     headers = {
-        "Authorization": f"Bearer {os.getenv('28c2987fb559323d9d0791cf2eeae02ecc86666e')}",  # 從環境變數獲取 API 金鑰（如果需要）
+        "Authorization": f"Bearer {os.getenv('SEARCH_API_KEY')}",  # 從環境變數獲取 API 金鑰
         "Content-Type": "application/json"
     }
-    
+
     logger.info(f"Sending request to web search with query: {query}")
-    
-    response = requests.get(search_url, headers=headers)
-    
-    if response.status_code == 200:
-        logger.info(f"Response from web search: {response.json()}")
-        return response.json()  # 假設回應返回 JSON
-    else:
-        logger.error(f"Error: Failed to search web, HTTP code: {response.status_code}, error info: {response.text}")
-        return None
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(search_url, headers=headers) as response:
+            if response.status == 200:
+                result = await response.json()
+                logger.info(f"Response from web search: {result}")
+                return result  # 假設回應返回 JSON
+            else:
+                logger.error(f"Error: Failed to search web, HTTP code: {response.status}, error info: {await response.text()}")
+                return None
 
 # 呼叫 OpenAI Chat API
 async def call_openai_chat_api(user_message):
@@ -150,7 +150,7 @@ async def handle_callback(request: Request):
             continue
         
         # 執行網頁檢索
-        search_results = web_search(user_message)
+        search_results = await web_search(user_message)
         search_content = ""
         
         if search_results and "results" in search_results:
