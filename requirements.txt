@@ -1,6 +1,7 @@
-line-bot-sdk==3.5.0
+google-auth
+google-api-python-client
+google-auth-oauthlib
+openai
 fastapi
-uvicorn[standard]
-openai==0.28.1
-python-dotenv
+line-bot-sdk
 aiohttp
