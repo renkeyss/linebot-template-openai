@@ -25,11 +25,23 @@ from googleapiclient.discovery import build
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Google Drive API 設置
-SERVICE_ACCOUNT_FILE = 'google-cch@core-appliance-436705-m8.iam.gserviceaccount.com'  # 使用金鑰檔案的實際路徑
+# 直接貼入金鑰資訊
+SERVICE_ACCOUNT_INFO = {
+    "type": "service_account",
+    "project_id": "117414381559448263801",
+    "private_key_id": "117414381559448263801",
+    "private_key": "28c2987fb559323d9d0791cf2eeae02ecc86666e",
+    "client_email": "google-cch@core-appliance-436705-m8.iam.gserviceaccount.com",
+    "client_id": "117414381559448263801",
+    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    "token_uri": "https://oauth2.googleapis.com/token",
+    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    "client_x509_cert_url": "YOUR_CLIENT_X509_CERT_URL"
+}
+
 SCOPES = ['https://www.googleapis.com/auth/drive.metadata.readonly']
 
-credentials = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+credentials = service_account.Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=SCOPES)
 drive_service = build('drive', 'v3', credentials=credentials)
 
 # Dictionary to store user message counts and reset times
