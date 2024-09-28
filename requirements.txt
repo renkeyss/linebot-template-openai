@@ -4,3 +4,10 @@ uvicorn[standard]
 openai==0.28.1
 python-dotenv
 aiohttp
+google-auth
+google-api-python-client
+google-auth-oauthlib
+openai
+fastapi
+line-bot-sdk
+aiohttp
