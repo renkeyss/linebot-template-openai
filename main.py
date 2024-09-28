@@ -16,20 +16,24 @@ from linebot.exceptions import (
 from linebot.models import (
     MessageEvent, TextMessage, TextSendMessage,
 )
-from dotenv import load_dotenv, find_dotenv
 import logging
+
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
 
 # 設置日誌紀錄
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 讀取環境變數
-_ = load_dotenv(find_dotenv())
+# Google Drive API 設置
+SERVICE_ACCOUNT_FILE = 'google-cch@core-appliance-436705-m8.iam.gserviceaccount.com'  # 使用金鑰檔案的實際路徑
+SCOPES = ['https://www.googleapis.com/auth/drive.metadata.readonly']
+
+credentials = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+drive_service = build('drive', 'v3', credentials=credentials)
 
 # Dictionary to store user message counts and reset times
 user_message_counts = {}
-
-# User daily limit
 USER_DAILY_LIMIT = 5
 
 def reset_user_count(user_id):
@@ -38,9 +42,24 @@ def reset_user_count(user_id):
         'reset_time': datetime.now() + timedelta(days=1)
     }
 
+# 獲取 Google Drive 中的資料夾內容
+async def get_drive_folder_contents(folder_id):
+    try:
+        query = f"'{folder_id}' in parents"
+        results = drive_service.files().list(q=query, pageSize=10, fields="files(id, name)").execute()
+        items = results.get('files', [])
+        
+        if not items:
+            return "此資料夾是空的。"
+        
+        return "\n".join([f"{item['name']} (ID: {item['id']})" for item in items])
+    
+    except Exception as e:
+        logger.error(f"Error fetching Google Drive folder contents: {e}")
+        return "無法獲取資料夾內容。"
+
 # 執行網頁檢索
 async def web_search(query):
-    # 將此替換為實際的搜尋引擎 API 的 URL
     search_url = f"https://api.example.com/search?q={query}"  
     headers = {
         "Authorization": f"Bearer {os.getenv('SEARCH_API_KEY')}",  # 從環境變數獲取 API 金鑰
@@ -54,14 +73,14 @@ async def web_search(query):
             if response.status == 200:
                 result = await response.json()
                 logger.info(f"Response from web search: {result}")
-                return result  # 假設回應返回 JSON
+                return result
             else:
                 logger.error(f"Error: Failed to search web, HTTP code: {response.status}, error info: {await response.text()}")
                 return None
 
 # 呼叫 OpenAI Chat API
 async def call_openai_chat_api(user_message):
-    openai.api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
+    openai.api_key = os.getenv('OPENAI_API_KEY')
     
     try:
         response = await openai.ChatCompletion.acreate(
@@ -94,7 +113,7 @@ async_http_client = AiohttpAsyncHttpClient(session)
 line_bot_api = AsyncLineBotApi(channel_access_token, async_http_client)
 parser = WebhookParser(channel_secret)
 
-# Introduction message
+# 入口訊息
 introduction_message = (
     "我是彰化基督教醫院 內分泌科小助理，您有任何關於：糖尿病、高血壓及內分泌的相關問題都可以問我。"
 )
@@ -102,8 +121,6 @@ introduction_message = (
 @app.post("/callback")
 async def handle_callback(request: Request):
     signature = request.headers['X-Line-Signature']
-
-    # get request body as text
     body = await request.body()
     logger.info(f"Request body: {body.decode()}")
     body = body.decode()
@@ -148,20 +165,14 @@ async def handle_callback(request: Request):
                 TextSendMessage(text=introduction_message)
             )
             continue
-        
-        # 執行網頁檢索
-        search_results = await web_search(user_message)
-        search_content = ""
-        
-        if search_results and "results" in search_results:
-            search_items = search_results["results"]
-            if search_items:
-                search_content = "\n".join(item['title'] for item in search_items)  # 假設每個項目有一個標題
-        
-        # 組合最終回覆
-        if search_content:
-            result_text = f"網頁檢索結果：\n{search_content}"
+
+        # 獲取 Google Drive 資料夾內容
+        if "資料夾內容" in user_message:
+            folder_id = "1Thj7yNdrtoZ1NVRO7IlRSO8EfVUyKgfe"  # 硬編碼資料夾 ID
+            folder_content = await get_drive_folder_contents(folder_id)
+            result_text = f"資料夾內容：\n{folder_content}"
         else:
+            # 此處保留原有的網頁檢索或 OpenAI 處理邏輯
             result_text = await call_openai_chat_api(user_message)
 
         # 更新用戶訊息計數
