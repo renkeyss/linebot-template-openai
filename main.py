@@ -39,62 +39,35 @@ def reset_user_count(user_id):
         'reset_time': datetime.now() + timedelta(days=1)
     }
 
-# 查詢 OpenAI Storage Vector Store
-def search_vector_store(query):
-    vector_store_id = 'vs_O4EC1xmZuHy3WiSlcmklQgsR'  # Vector Store ID
-    api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
-    
-    if not api_key:
-        logger.error("API key is not set")
-        return None
-
-    url = f"https://api.openai.com/v1/vector_stores/{vector_store_id}"
-    
-    payload = {
-        "query": query
-    }
-    
+# 執行網頁檢索
+def web_search(query):
+    # 這是一個簡單的示範，實際上可以使用適合的搜尋引擎 API
+    search_url = f"https://datastream.googleapis.com"  # 將此替換為實際的搜尋 URL
     headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "OpenAI-Beta": "assistants=v2"
+        "Authorization": f"Bearer {os.getenv('SEARCH_API_KEY')}",  # 從環境變數獲取 API 金鑰（如果需要）
+        "Content-Type": "application/json"
     }
-
-    logger.info(f"Sending request to Vector Store with query: {query}")
     
-    response = requests.post(url, json=payload, headers=headers)
+    logger.info(f"Sending request to web search with query: {query}")
+    
+    response = requests.get(search_url, headers=headers)
     
     if response.status_code == 200:
-        logger.info(f"Response from Vector Store: {response.json()}")
+        logger.info(f"Response from web search: {response.json()}")
         return response.json()  # 假設回應返回 JSON
     else:
-        logger.error(f"Error: Failed to search Vector Store, HTTP code: {response.status_code}, error info: {response.text}")
+        logger.error(f"Error: Failed to search web, HTTP code: {response.status_code}, error info: {response.text}")
         return None
 
 # 呼叫 OpenAI Chat API
 async def call_openai_chat_api(user_message):
     openai.api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
     
-    assistant_id = 'asst_HVKXE6R3ZcGb6oW6fDEpbdOi'  # 指定助手 ID
-
-    # 首先檢查知識庫
-    vector_store_response = search_vector_store(user_message)
-    knowledge_content = ""
-    
-    if vector_store_response and "results" in vector_store_response:
-        knowledge_items = vector_store_response["results"]
-        if knowledge_items:
-            # 整合知識庫資料
-            knowledge_content = "\n".join(item['content'] for item in knowledge_items)
-    
-    # 組合最終訊息
-    user_message = f"{user_message}\n相關知識庫資料：\n{knowledge_content}" if knowledge_content else user_message
-
     try:
         response = await openai.ChatCompletion.acreate(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": f"Assistant ID: {assistant_id}. 你是一個樂於助人的助手，請使用繁體中文回覆。"},
+                {"role": "system", "content": "你是一個樂於助人的助手，請使用繁體中文回覆。"},
                 {"role": "user", "content": user_message}
             ]
         )
@@ -175,10 +148,22 @@ async def handle_callback(request: Request):
                 TextSendMessage(text=introduction_message)
             )
             continue
-
-        # 呼叫 OpenAI 助手
-        result_text = await call_openai_chat_api(user_message)
         
+        # 執行網頁檢索
+        search_results = web_search(user_message)
+        search_content = ""
+        
+        if search_results and "results" in search_results:
+            search_items = search_results["results"]
+            if search_items:
+                search_content = "\n".join(item['title'] for item in search_items)  # 假設每個項目有一個標題
+        
+        # 組合最終回覆
+        if search_content:
+            result_text = f"網頁檢索結果：\n{search_content}"
+        else:
+            result_text = await call_openai_chat_api(user_message)
+
         # 更新用戶訊息計數
         user_message_counts[user_id]['count'] += 1
 
