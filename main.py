@@ -96,16 +96,18 @@ introduction_message = (
 
 @app.post("/callback")
 async def handle_callback(request: Request):
-    try:
-        # 立即返回響應
-        signature = request.headers['X-Line-Signature']
-        body = await request.body()
-        logger.info(f"Request body: {body.decode()}")
+    # 立即返回成功的 HTTP 200 響應
+    signature = request.headers['X-Line-Signature']
+    body = await request.body()
+    logger.info(f"Received webhook body: {body.decode()}")
 
-        # 確認簽名
+    try:
+        # 解析 webhook 的事件
         events = parser.parse(body.decode(), signature)
 
+        # 處理所有事件
         for event in events:
+            # 確保只是處理訊息事件
             if not isinstance(event, MessageEvent):
                 continue
             if not isinstance(event.message, TextMessage):
@@ -146,7 +148,7 @@ async def handle_callback(request: Request):
                 folder_content = await get_drive_folder_contents(folder_id)
                 result_text = f"資料夾內容：\n{folder_content}"
             else:
-                # 調用 OpenAI 的處理邏輯（您需要添加此函數）
+                # 在這裡調用 OpenAI 的函數來處理用戶請求
                 result_text = await call_openai_chat_api(user_message)
 
             # 更新用戶訊息計數
@@ -158,8 +160,12 @@ async def handle_callback(request: Request):
                 TextSendMessage(text=result_text)
             )
 
-        return HTTPException(status_code=200, detail='OK')  # 成功回應
+    except InvalidSignatureError:
+        logger.error("Invalid signature")
+        return HTTPException(status_code=400, detail="Invalid signature")  # 返回簽名無效的錯誤
 
     except Exception as e:
-        logger.error(f"Error handling callback: {e}")
-        return HTTPException(status_code=500, detail='Internal Server Error')  # 返回內部伺服器錯誤響應
+        logger.error(f"Error processing the request: {e}")
+        return HTTPException(status_code=500, detail="Internal Server Error") # 返回500錯誤響應
+
+    return HTTPException(status_code=200, detail='OK')  # 返回成功響應
