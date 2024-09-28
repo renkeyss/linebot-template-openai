@@ -17,6 +17,7 @@ from linebot.exceptions import (
 from linebot.models import (
     MessageEvent, TextMessage, TextSendMessage,
 )
+from dotenv import load_dotenv, find_dotenv
 import logging
 
 from google.oauth2 import service_account
@@ -28,19 +29,33 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # 讀取環境變數
-# 如果您使用的是 dotenv，則需要這一行，如果不需要請刪除
-# _ = load_dotenv(find_dotenv())
+_ = load_dotenv(find_dotenv())
 
 # Google Drive API 設置
-SERVICE_ACCOUNT_FILE = os.getenv('GOOGLE_SERVICE_ACCOUNT_FILE')  # JSON 檔案路徑
-SCOPES = ['https://www.googleapis.com/auth/drive.metadata.readonly']
+SERVICE_ACCOUNT_EMAIL = "google-cch@core-appliance-436705-m8.iam.gserviceaccount.com"
+PRIVATE_KEY = """-----BEGIN PRIVATE KEY-----
+YOUR_PRIVATE_KEY
+-----END PRIVATE KEY-----\n"""
+SERVICE_ACCOUNT_INFO = {
+    "type": "service_account",
+    "project_id": "core-appliance-436705-m8",
+    "private_key_id": "28c2987fb559323d9d0791cf2eeae02ecc86666e",
+    "private_key": PRIVATE_KEY,
+    "client_email": SERVICE_ACCOUNT_EMAIL,
+    "client_id": "117414381559448263801",
+    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    "token_uri": "https://oauth2.googleapis.com/token",
+    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/{SERVICE_ACCOUNT_EMAIL}"
+}
 
-# 使用服務帳號憑證進行身份驗證
-credentials = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+credentials = service_account.Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=['https://www.googleapis.com/auth/drive.metadata.readonly'])
 drive_service = build('drive', 'v3', credentials=credentials)
 
 # Dictionary to store user message counts and reset times
 user_message_counts = {}
+
+# User daily limit
 USER_DAILY_LIMIT = 5
 
 def reset_user_count(user_id):
@@ -53,13 +68,12 @@ def reset_user_count(user_id):
 async def get_drive_folder_contents(folder_id):
     loop = asyncio.get_event_loop()
     try:
-        logger.info(f"Fetching contents of folder ID: {folder_id}")
         results = await loop.run_in_executor(None, lambda: drive_service.files().list(
             q=f"'{folder_id}' in parents",
-            fields="files(id, name)",
-            pageSize=10
+            pageSize=10,
+            fields="files(id, name)"
         ).execute())
-
+        
         items = results.get('files', [])
         
         if not items:
@@ -99,8 +113,6 @@ introduction_message = (
 @app.post("/callback")
 async def handle_callback(request: Request):
     signature = request.headers['X-Line-Signature']
-
-    # get request body as text
     body = await request.body()
     logger.info(f"Request body: {body.decode()}")
     body = body.decode()
@@ -146,13 +158,13 @@ async def handle_callback(request: Request):
             )
             continue
 
-        # 獲取 Google Drive 資料夾內容
+        # 如果用戶要求資料夾內容，則調用相應的函數
         if "資料夾內容" in user_message:
             folder_id = "1Thj7yNdrtoZ1NVRO7IlRSO8EfVUyKgfe"  # 硬編碼資料夾 ID
             folder_content = await get_drive_folder_contents(folder_id)
             result_text = f"資料夾內容：\n{folder_content}"
         else:
-            # 呼叫 OpenAI 助手（需要添加此函數）
+            # 調用 OpenAI 的處理邏輯（您需要添加此函數）
             result_text = await call_openai_chat_api(user_message)
 
         # 更新用戶訊息計數
