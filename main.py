@@ -4,7 +4,7 @@ import openai
 import os
 import sys
 import aiohttp
-import asyncio
+import requests
 from datetime import datetime, timedelta
 from fastapi import Request, FastAPI, HTTPException
 from linebot import (
@@ -20,10 +20,6 @@ from linebot.models import (
 from dotenv import load_dotenv, find_dotenv
 import logging
 
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-
 # 設置日誌紀錄
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -31,15 +27,10 @@ logger = logging.getLogger(__name__)
 # 讀取環境變數
 _ = load_dotenv(find_dotenv())
 
-# Google Drive API 設置
-SERVICE_ACCOUNT_FILE = os.getenv('GOOGLE_SERVICE_ACCOUNT_FILE')
-SCOPES = ['https://www.googleapis.com/auth/drive.metadata.readonly']
-
-credentials = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
-drive_service = build('drive', 'v3', credentials=credentials)
-
 # Dictionary to store user message counts and reset times
 user_message_counts = {}
+
+# User daily limit
 USER_DAILY_LIMIT = 5
 
 def reset_user_count(user_id):
@@ -48,48 +39,74 @@ def reset_user_count(user_id):
         'reset_time': datetime.now() + timedelta(days=1)
     }
 
-# 獲取 Google Drive 中的資料夾內容
-async def get_drive_folder_contents(folder_id):
-    max_retries = 5
-    delay = 1  # 初始延遲
-    for attempt in range(max_retries):
-        try:
-            await asyncio.sleep(1)  # 確保每個請求之間的延遲
-            loop = asyncio.get_event_loop()
-            results = await loop.run_in_executor(None, lambda: drive_service.files().list(
-                q=f"'{folder_id}' in parents", 
-                pageSize=10, 
-                fields="files(id, name)"
-            ).execute())
-            items = results.get('files', [])
+# 查詢 OpenAI Storage Vector Store
+def search_vector_store(query):
+    vector_store_id = 'vs_O4EC1xmZuHy3WiSlcmklQgsR'  # Vector Store ID
+    api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
+    
+    if not api_key:
+        logger.error("API key is not set")
+        return None
 
-            if not items:
-                return "此資料夾是空的。"
+    url = f"https://api.openai.com/v1/vector_stores/{vector_store_id}"
+    
+    payload = {
+        "query": query
+    }
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "OpenAI-Beta": "assistants=v2"
+    }
 
-            return "\n".join([f"{item['name']} (ID: {item['id']})" for item in items])
-        
-        except HttpError as e:
-            if e.resp.status == 429:  # Rate limit exceeded
-                logger.warning(f"Rate limit exceeded. Waiting {delay} seconds before next attempt.")
-                await asyncio.sleep(delay)  # 等待後退時間
-                delay *= 2  # 每次重試時加倍延遲
-            else:
-                logger.error(f"HTTP error fetching Google Drive folder contents: {e}")
-                return "無法獲取資料夾內容。"
-        except Exception as e:
-            logger.error(f"Error fetching Google Drive folder contents: {e}")
-            return "無法獲取資料夾內容。"
+    logger.info(f"Sending request to Vector Store with query: {query}")
+    
+    response = requests.post(url, json=payload, headers=headers)
+    
+    if response.status_code == 200:
+        logger.info(f"Response from Vector Store: {response.json()}")
+        return response.json()  # 假設回應返回 JSON
+    else:
+        logger.error(f"Error: Failed to search Vector Store, HTTP code: {response.status_code}, error info: {response.text}")
+        return None
 
-    return "達到最大重試次數."
+# 呼叫 OpenAI Chat API
+async def call_openai_chat_api(user_message):
+    openai.api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
+    
+    assistant_id = 'asst_HVKXE6R3ZcGb6oW6fDEpbdOi'  # 指定助手 ID
 
-# Initialize LINE Bot Messaging API
-app = FastAPI()
-session = aiohttp.ClientSession()
-async_http_client = AiohttpAsyncHttpClient(session)
+    # 首先檢查知識庫
+    vector_store_response = search_vector_store(user_message)
+    knowledge_content = ""
+    
+    if vector_store_response and "results" in vector_store_response:
+        knowledge_items = vector_store_response["results"]
+        if knowledge_items:
+            # 整合知識庫資料
+            knowledge_content = "\n".join(item['content'] for item in knowledge_items)
+    
+    # 組合最終訊息
+    user_message = f"{user_message}\n相關知識庫資料：\n{knowledge_content}" if knowledge_content else user_message
 
+    try:
+        response = await openai.ChatCompletion.acreate(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": f"Assistant ID: {assistant_id}. 你是一個樂於助人的助手，請使用繁體中文回覆。"},
+                {"role": "user", "content": user_message}
+            ]
+        )
+        logger.info(f"Response from OpenAI assistant: {response.choices[0]['message']['content']}")
+        return response.choices[0]['message']['content']
+    except Exception as e:
+        logger.error(f"Error calling OpenAI assistant: {e}")
+        return "Error: 系統出現錯誤，請稍後再試。"
+
+# 獲取 channel_secret 和 channel_access_token
 channel_secret = os.getenv('ChannelSecret', None)
 channel_access_token = os.getenv('ChannelAccessToken', None)
-
 if channel_secret is None:
     logger.error('Specify LINE_CHANNEL_SECRET as environment variable.')
     sys.exit(1)
@@ -97,83 +114,78 @@ if channel_access_token is None:
     logger.error('Specify LINE_CHANNEL_ACCESS_TOKEN as environment variable.')
     sys.exit(1)
 
+# Initialize LINE Bot Messaging API
+app = FastAPI()
+session = aiohttp.ClientSession()
+async_http_client = AiohttpAsyncHttpClient(session)
 line_bot_api = AsyncLineBotApi(channel_access_token, async_http_client)
 parser = WebhookParser(channel_secret)
 
-# 入口訊息
+# Introduction message
 introduction_message = (
     "我是彰化基督教醫院 內分泌科小助理，您有任何關於：糖尿病、高血壓及內分泌的相關問題都可以問我。"
 )
 
 @app.post("/callback")
 async def handle_callback(request: Request):
-    # 立即返回成功的 HTTP 200 響應
     signature = request.headers['X-Line-Signature']
+
+    # get request body as text
     body = await request.body()
-    logger.info(f"Received webhook body: {body.decode()}")
+    logger.info(f"Request body: {body.decode()}")
+    body = body.decode()
 
     try:
-        events = parser.parse(body.decode(), signature)
-
-        for event in events:
-            if not isinstance(event, MessageEvent):
-                continue
-            if not isinstance(event.message, TextMessage):
-                continue
-
-            user_id = event.source.user_id
-            user_message = event.message.text
-
-            logger.info(f"Received message from user {user_id}: {user_message}")
-
-            # 檢查訊息計數是否需要重置
-            if user_id in user_message_counts:
-                if datetime.now() >= user_message_counts[user_id]['reset_time']:
-                    reset_user_count(user_id)
-            else:
-                reset_user_count(user_id)
-
-            # 檢查用戶是否超過每日限制
-            if user_message_counts[user_id]['count'] >= USER_DAILY_LIMIT:
-                logger.info(f"User {user_id} exceeded daily limit")
-                await line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text="您今天的用量已經超過，請明天再詢問。")
-                )
-                continue
-
-            # 處理特殊請求（如介紹）
-            if "介紹" in user_message or "你是誰" in user_message:
-                await line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text=introduction_message)
-                )
-                continue
-
-            # 獲取 Google Drive 資料夾內容
-            if "資料夾內容" in user_message:
-                folder_id = "1Thj7yNdrtoZ1NVRO7IlRSO8EfVUyKgfe"  # 硬編碼資料夾 ID
-                folder_content = await get_drive_folder_contents(folder_id)
-                result_text = f"資料夾內容：\n{folder_content}"
-            else:
-                # 調用 OpenAI 的處理邏輯（您需要添加此函數）
-                result_text = await call_openai_chat_api(user_message)
-
-            # 更新用戶訊息計數
-            user_message_counts[user_id]['count'] += 1
-
-            # 回應用戶訊息
-            await line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text=result_text)
-            )
-
+        events = parser.parse(body, signature)
     except InvalidSignatureError:
         logger.error("Invalid signature")
-        return HTTPException(status_code=400, detail="Invalid signature")  # 返回簽名無效的錯誤
+        raise HTTPException(status_code=400, detail="Invalid signature")
 
-    except Exception as e:
-        logger.error(f"Error processing the request: {e}")
-        return HTTPException(status_code=500, detail="Internal Server Error") # 返回500錯誤響應
+    for event in events:
+        if not isinstance(event, MessageEvent):
+            continue
+        if not isinstance(event.message, TextMessage):
+            continue
 
-    return HTTPException(status_code=200, detail='OK')  # 返回成功響應
+        user_id = event.source.user_id
+        user_message = event.message.text
+
+        logger.info(f"Received message from user {user_id}: {user_message}")
+
+        # 檢查訊息計數是否需要重置
+        if user_id in user_message_counts:
+            if datetime.now() >= user_message_counts[user_id]['reset_time']:
+                reset_user_count(user_id)
+        else:
+            reset_user_count(user_id)
+
+        # 檢查用戶是否超過每日限制
+        if user_message_counts[user_id]['count'] >= USER_DAILY_LIMIT:
+            logger.info(f"User {user_id} exceeded daily limit")
+            await line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="您今天的用量已經超過，請明天再詢問。")
+            )
+            continue
+
+        # 處理特殊請求（如介紹）
+        if "介紹" in user_message or "你是誰" in user_message:
+            await line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=introduction_message)
+            )
+            continue
+
+        # 呼叫 OpenAI 助手
+        result_text = await call_openai_chat_api(user_message)
+        
+        # 更新用戶訊息計數
+        user_message_counts[user_id]['count'] += 1
+
+        # 回應用戶訊息
+        await line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text=result_text)
+        )
+
+    return 'OK'
