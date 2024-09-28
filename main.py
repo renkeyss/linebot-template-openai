@@ -50,26 +50,37 @@ def reset_user_count(user_id):
 
 # 獲取 Google Drive 中的資料夾內容
 async def get_drive_folder_contents(folder_id):
-    loop = asyncio.get_event_loop()
-    try:
-        results = await loop.run_in_executor(None, lambda: drive_service.files().list(
-            q=f"'{folder_id}' in parents", 
-            pageSize=10, 
-            fields="files(id, name)"
-        ).execute())
-        items = results.get('files', [])
+    max_retries = 5
+    delay = 1  # 初始延遲
+    for attempt in range(max_retries):
+        try:
+            await asyncio.sleep(1)  # 確保每個請求之間的延遲
+            loop = asyncio.get_event_loop()
+            results = await loop.run_in_executor(None, lambda: drive_service.files().list(
+                q=f"'{folder_id}' in parents", 
+                pageSize=10, 
+                fields="files(id, name)"
+            ).execute())
+            items = results.get('files', [])
+
+            if not items:
+                return "此資料夾是空的。"
+
+            return "\n".join([f"{item['name']} (ID: {item['id']})" for item in items])
         
-        if not items:
-            return "此資料夾是空的。"
-        
-        return "\n".join([f"{item['name']} (ID: {item['id']})" for item in items])
-    
-    except HttpError as e:
-        logger.error(f"HTTP error fetching Google Drive folder contents: {e}")
-        return "無法獲取資料夾內容。"
-    except Exception as e:
-        logger.error(f"Error fetching Google Drive folder contents: {e}")
-        return "無法獲取資料夾內容。"
+        except HttpError as e:
+            if e.resp.status == 429:  # Rate limit exceeded
+                logger.warning(f"Rate limit exceeded. Waiting {delay} seconds before next attempt.")
+                await asyncio.sleep(delay)  # 等待後退時間
+                delay *= 2  # 每次重試時加倍延遲
+            else:
+                logger.error(f"HTTP error fetching Google Drive folder contents: {e}")
+                return "無法獲取資料夾內容。"
+        except Exception as e:
+            logger.error(f"Error fetching Google Drive folder contents: {e}")
+            return "無法獲取資料夾內容。"
+
+    return "達到最大重試次數."
 
 # Initialize LINE Bot Messaging API
 app = FastAPI()
@@ -102,12 +113,9 @@ async def handle_callback(request: Request):
     logger.info(f"Received webhook body: {body.decode()}")
 
     try:
-        # 解析 webhook 的事件
         events = parser.parse(body.decode(), signature)
 
-        # 處理所有事件
         for event in events:
-            # 確保只是處理訊息事件
             if not isinstance(event, MessageEvent):
                 continue
             if not isinstance(event.message, TextMessage):
@@ -144,11 +152,11 @@ async def handle_callback(request: Request):
 
             # 獲取 Google Drive 資料夾內容
             if "資料夾內容" in user_message:
-                folder_id = "1Thj7yNdrtoZ1NVRO7IlRSO8EfVUyKgfe?usp=sharing"  # 硬編碼資料夾 ID
+                folder_id = "1Thj7yNdrtoZ1NVRO7IlRSO8EfVUyKgfe"  # 硬編碼資料夾 ID
                 folder_content = await get_drive_folder_contents(folder_id)
                 result_text = f"資料夾內容：\n{folder_content}"
             else:
-                # 在這裡調用 OpenAI 的函數來處理用戶請求
+                # 調用 OpenAI 的處理邏輯（您需要添加此函數）
                 result_text = await call_openai_chat_api(user_message)
 
             # 更新用戶訊息計數
