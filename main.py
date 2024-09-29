@@ -47,7 +47,7 @@ def reset_user_count(user_id):
 
 # 查詢 Pinecone 向量資料庫
 def search_vector_store(query):
-    index_name = 'Default'  # 替換為你的 Pinecone 索引名稱
+    index_name = 'quickstart'  # 替換為你的 Pinecone 索引名稱
     index = pinecone.Index(index_name)
     
     # 在此進行向量化查詢（這裡需要將查詢轉換為向量，通常會使用 OpenAI 的 embeddings API）
