@@ -26,6 +26,18 @@ logger = logging.getLogger(__name__)
 # 讀取環境變數
 _ = load_dotenv()
 
+index_name = "quickstart"
+
+pc.create_index(
+    name=index_name,
+    dimension=8, # Replace with your model dimensions
+    metric="cosine", # Replace with your model metric
+    spec=ServerlessSpec(
+        cloud="aws",
+        region="us-east-1"
+    ) 
+)
+
 # 初始化 Pinecone
 pinecone.init(api_key=os.getenv('PINECONE_API_KEY'), environment=os.getenv('PINECONE_ENVIRONMENT'))
 index_name = 'your_index_name'  # 將此處替換為你的 Pinecone 索引名稱
@@ -42,6 +54,8 @@ def reset_user_count(user_id):
         'count': 0,
         'reset_time': datetime.now() + timedelta(days=1)
     }
+
+
 
 # 查詢 Pinecone
 def search_pinecone(query):
