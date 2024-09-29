@@ -7,4 +7,4 @@ aiohttp
 google-auth
 google-api-python-client
 google-auth-oauthlib
-
+pip install beautifulsoup4 aiohttp
