@@ -4,7 +4,6 @@ import openai
 import os
 import sys
 import aiohttp
-import requests
 from datetime import datetime, timedelta
 from fastapi import Request, FastAPI, HTTPException
 from linebot import (
@@ -29,9 +28,11 @@ logger = logging.getLogger(__name__)
 _ = load_dotenv(find_dotenv())
 
 # 新增 Pinecone 初始化
-pinecone_api_key = os.getenv('PINECONE_API_KEY')  
+pinecone_api_key = os.getenv('PINECONE_API_KEY')
 pinecone_environment = os.getenv('PINECONE_ENVIRONMENT')
-pinecone.init(api_key=pinecone_api_key, environment=pinecone_environment)  # 初始化 Pinecone
+
+# 初始化 Pinecone
+pinecone.init(api_key=pinecone_api_key, environment=pinecone_environment)
 
 # Dictionary to store user message counts and reset times
 user_message_counts = {}
@@ -49,8 +50,8 @@ def reset_user_count(user_id):
 def search_vector_store(query):
     index_name = 'quickstart'  # 替換為你的 Pinecone 索引名稱
     index = pinecone.Index(index_name)
-    
-    # 在此進行向量化查詢（這裡需要將查詢轉換為向量，通常會使用 OpenAI 的 embeddings API）
+
+    # 使用 OpenAI 的 Embedding API 對查詢進行向量化
     embedding = openai.Embedding.create(input=query, model="text-embedding-ada-002")
     query_vector = embedding['data'][0]['embedding']
 
@@ -68,9 +69,9 @@ def search_vector_store(query):
 
 # 呼叫 OpenAI Chat API
 async def call_openai_chat_api(user_message):
-    openai.api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
-    
-    assistant_id = 'asst_HVKXE6R3ZcGb6oW6fDEpbdOi'  # 指定助手 ID
+    openai.api_key = os.getenv('OPENAI_API_KEY')
+
+    assistant_id = 'asst_HVKXE6R3ZcGb6oW6fDEpbdOi'
 
     # 首先檢查知識庫
     vector_store_response = search_vector_store(user_message)
@@ -79,9 +80,8 @@ async def call_openai_chat_api(user_message):
     if vector_store_response:
         if knowledge_items := vector_store_response:
             # 整合知識庫資料
-            knowledge_content = "\n".join(item['metadata']['content'] for item in knowledge_items)  # 確保有 `content` 欄位
-    
-    # 組合最終訊息
+            knowledge_content = "\n".join(item['metadata']['content'] for item in knowledge_items)
+
     user_message = f"{user_message}\n相關知識庫資料：\n{knowledge_content}" if knowledge_content else user_message
 
     try:
@@ -105,7 +105,7 @@ if channel_secret is None:
     logger.error('Specify LINE_CHANNEL_SECRET as environment variable.')
     sys.exit(1)
 if channel_access_token is None:
-    logger.error('Specify LINE_CHANNEL_ACCESS_TOKEN as environment variable.')
+    logger.error('Specify LINE_ACCESS_TOKEN as environment variable.')
     sys.exit(1)
 
 # Initialize LINE Bot Messaging API
@@ -124,7 +124,6 @@ introduction_message = (
 async def handle_callback(request: Request):
     signature = request.headers['X-Line-Signature']
 
-    # get request body as text
     body = await request.body()
     logger.info(f"Request body: {body.decode()}")
     body = body.decode()
