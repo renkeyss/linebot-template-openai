@@ -48,7 +48,7 @@ def reset_user_count(user_id):
 
 # 查詢 Pinecone 向量資料庫
 def search_vector_store(query):
-    index_name = 'quickstart'  # 替換為你的 Pinecone 索引名稱
+    index_name = 'renkeyss'  # 替換為你的 Pinecone 索引名稱
     index = pinecone.Index(index_name)
 
     # 使用 OpenAI 的 Embedding API 對查詢進行向量化
@@ -66,12 +66,6 @@ def search_vector_store(query):
     else:
         logger.error("Error: Failed to search Pinecone vector store")
         return None
-
-# 呼叫 OpenAI Chat API
-async def call_openai_chat_api(user_message):
-    openai.api_key = os.getenv('OPENAI_API_KEY')
-
-    assistant_id = 'asst_HVKXE6R3ZcGb6oW6fDEpbdOi'
 
     # 首先檢查知識庫
     vector_store_response = search_vector_store(user_message)
