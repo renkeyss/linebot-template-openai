@@ -4,3 +4,4 @@ uvicorn[standard]
 openai==0.28.1
 python-dotenv
 aiohttp
+pip install pinecone
