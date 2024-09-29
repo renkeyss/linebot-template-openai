@@ -4,7 +4,7 @@ import openai
 import os
 import sys
 import aiohttp
-import asyncio
+import requests
 from datetime import datetime, timedelta
 from fastapi import Request, FastAPI, HTTPException
 from linebot import (
@@ -20,37 +20,12 @@ from linebot.models import (
 from dotenv import load_dotenv, find_dotenv
 import logging
 
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-
 # 設置日誌紀錄
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # 讀取環境變數
 _ = load_dotenv(find_dotenv())
-
-# Google Drive API 設置
-SERVICE_ACCOUNT_EMAIL = "google-cch@core-appliance-436705-m8.iam.gserviceaccount.com"
-PRIVATE_KEY = """-----BEGIN PRIVATE KEY-----
-YOUR_PRIVATE_KEY
------END PRIVATE KEY-----\n"""
-SERVICE_ACCOUNT_INFO = {
-    "type": "service_account",
-    "project_id": "core-appliance-436705-m8",
-    "private_key_id": "28c2987fb559323d9d0791cf2eeae02ecc86666e",
-    "private_key": PRIVATE_KEY,
-    "client_email": SERVICE_ACCOUNT_EMAIL,
-    "client_id": "117414381559448263801",
-    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-    "token_uri": "https://oauth2.googleapis.com/token",
-    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-    "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/{SERVICE_ACCOUNT_EMAIL}"
-}
-
-credentials = service_account.Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=['https://www.googleapis.com/auth/drive.metadata.readonly'])
-drive_service = build('drive', 'v3', credentials=credentials)
 
 # Dictionary to store user message counts and reset times
 user_message_counts = {}
@@ -64,29 +39,70 @@ def reset_user_count(user_id):
         'reset_time': datetime.now() + timedelta(days=1)
     }
 
-# 獲取 Google Drive 中的資料夾內容
-async def get_drive_folder_contents(folder_id):
-    loop = asyncio.get_event_loop()
-    try:
-        results = await loop.run_in_executor(None, lambda: drive_service.files().list(
-            q=f"'{folder_id}' in parents",
-            pageSize=10,
-            fields="files(id, name)"
-        ).execute())
-        
-        items = results.get('files', [])
-        
-        if not items:
-            return "此資料夾是空的。"
-
-        return "\n".join([f"{item['name']} (ID: {item['id']})" for item in items])
+# 查詢 OpenAI Storage Vector Store
+def search_vector_store(query):
+    vector_store_id = 'vs_O4EC1xmZuHy3WiSlcmklQgsR'  # Vector Store ID
+    api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
     
-    except HttpError as e:
-        logger.error(f"HTTP error fetching Google Drive folder contents: {e}")
-        return "無法獲取資料夾內容。"
+    if not api_key:
+        logger.error("API key is not set")
+        return None
+
+    url = f"https://api.openai.com/v1/vector_stores/{vector_store_id}"
+    
+    payload = {
+        "query": query
+    }
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "OpenAI-Beta": "assistants=v2"
+    }
+
+    logger.info(f"Sending request to Vector Store with query: {query}")
+    
+    response = requests.post(url, json=payload, headers=headers)
+    
+    if response.status_code == 200:
+        logger.info(f"Response from Vector Store: {response.json()}")
+        return response.json()  # 假設回應返回 JSON
+    else:
+        logger.error(f"Error: Failed to search Vector Store, HTTP code: {response.status_code}, error info: {response.text}")
+        return None
+
+# 呼叫 OpenAI Chat API
+async def call_openai_chat_api(user_message):
+    openai.api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
+    
+    assistant_id = 'asst_HVKXE6R3ZcGb6oW6fDEpbdOi'  # 指定助手 ID
+
+    # 首先檢查知識庫
+    vector_store_response = search_vector_store(user_message)
+    knowledge_content = ""
+    
+    if vector_store_response and "results" in vector_store_response:
+        knowledge_items = vector_store_response["results"]
+        if knowledge_items:
+            # 整合知識庫資料
+            knowledge_content = "\n".join(item['content'] for item in knowledge_items)
+    
+    # 組合最終訊息
+    user_message = f"{user_message}\n相關知識庫資料：\n{knowledge_content}" if knowledge_content else user_message
+
+    try:
+        response = await openai.ChatCompletion.acreate(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": f"Assistant ID: {assistant_id}. 你是一個樂於助人的助手，請使用繁體中文回覆。"},
+                {"role": "user", "content": user_message}
+            ]
+        )
+        logger.info(f"Response from OpenAI assistant: {response.choices[0]['message']['content']}")
+        return response.choices[0]['message']['content']
     except Exception as e:
-        logger.error(f"Error fetching Google Drive folder contents: {e}")
-        return "無法獲取資料夾內容。"
+        logger.error(f"Error calling OpenAI assistant: {e}")
+        return "Error: 系統出現錯誤，請稍後再試。"
 
 # 獲取 channel_secret 和 channel_access_token
 channel_secret = os.getenv('ChannelSecret', None)
@@ -105,7 +121,7 @@ async_http_client = AiohttpAsyncHttpClient(session)
 line_bot_api = AsyncLineBotApi(channel_access_token, async_http_client)
 parser = WebhookParser(channel_secret)
 
-# 入口訊息
+# Introduction message
 introduction_message = (
     "我是彰化基督教醫院 內分泌科小助理，您有任何關於：糖尿病、高血壓及內分泌的相關問題都可以問我。"
 )
@@ -113,6 +129,8 @@ introduction_message = (
 @app.post("/callback")
 async def handle_callback(request: Request):
     signature = request.headers['X-Line-Signature']
+
+    # get request body as text
     body = await request.body()
     logger.info(f"Request body: {body.decode()}")
     body = body.decode()
@@ -158,22 +176,10 @@ async def handle_callback(request: Request):
             )
             continue
 
-        # 如果用戶要求資料夾內容，則調用相應的函數
-        if "資料夾內容" in user_message:
-            folder_id = "1Thj7yNdrtoZ1NVRO7IlRSO8EfVUyKgfe"  # 硬編碼資料夾 ID
-            folder_content = await get_drive_folder_contents(folder_id)
-            result_text = f"資料夾內容：\n{folder_content}"
-        else:
-            # 調用 OpenAI 的處理邏輯（您需要添加此函數）
-            result_text = await call_openai_chat_api(user_message)
-
+        # 呼叫 OpenAI 助手
+        result_text = await call_openai_chat_api(user_message)
+        
         # 更新用戶訊息計數
         user_message_counts[user_id]['count'] += 1
 
         # 回應用戶訊息
-        await line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(text=result_text)
-        )
-
-    return 'OK'
