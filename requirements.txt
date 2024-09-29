@@ -6,6 +6,5 @@ python-dotenv
 aiohttp
 pinecone[grpc]
     langchain-pinecone
-    langchain-openai
     langchain-text-splitters
     langchain
