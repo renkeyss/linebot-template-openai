@@ -6,7 +6,7 @@ import sys
 import aiohttp
 import requests
 from datetime import datetime, timedelta
-from fastapi import Request, FastAPI, HTTPException
+from fastapi import Request, FastAPI, HTTPException, BackgroundTasks
 from linebot import (
     AsyncLineBotApi, WebhookParser
 )
@@ -156,7 +156,7 @@ introduction_message = (
 )
 
 @app.post("/callback")
-async def handle_callback(request: Request):
+async def handle_callback(request: Request, background_tasks: BackgroundTasks):
     signature = request.headers['X-Line-Signature']
 
     # get request body as text
@@ -208,11 +208,8 @@ async def handle_callback(request: Request):
         # 檢查用戶是否要求搜尋某個內容
         if "搜尋" in user_message:
             search_query = user_message.replace("搜尋", "").strip()
-            search_results = await perform_web_search(search_query)
-            await line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text=search_results)
-            )
+            # 使用背景任務進行網頁搜尋
+            background_tasks.add_task(handle_web_search_response, event.reply_token, search_query)
             continue
 
         # 呼叫 OpenAI 助手
@@ -228,3 +225,11 @@ async def handle_callback(request: Request):
         )
 
     return 'OK'
+
+# 背景任務處理
+async def handle_web_search_response(reply_token, search_query):
+    search_results = await perform_web_search(search_query)
+    await line_bot_api.reply_message(
+        reply_token,
+        TextSendMessage(text=search_results)
+    )
