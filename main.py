@@ -20,6 +20,7 @@ from linebot.models import (
 from dotenv import load_dotenv, find_dotenv
 import logging
 from bs4 import BeautifulSoup
+from fastapi.responses import JSONResponse
 
 # 設置日誌紀錄
 logging.basicConfig(level=logging.INFO)
@@ -157,74 +158,75 @@ introduction_message = (
 
 @app.post("/callback")
 async def handle_callback(request: Request, background_tasks: BackgroundTasks):
-    signature = request.headers['X-Line-Signature']
-
-    # get request body as text
-    body = await request.body()
-    logger.info(f"Request body: {body.decode()}")
-    body = body.decode()
-
     try:
+        signature = request.headers['X-Line-Signature']
+
+        # get request body as text
+        body = await request.body()
+        logger.info(f"Request body: {body.decode()}")
+        body = body.decode()
+
         events = parser.parse(body, signature)
-    except InvalidSignatureError:
-        logger.error("Invalid signature")
-        raise HTTPException(status_code=400, detail="Invalid signature")
 
-    for event in events:
-        if not isinstance(event, MessageEvent):
-            continue
-        if not isinstance(event.message, TextMessage):
-            continue
+        for event in events:
+            if not isinstance(event, MessageEvent):
+                continue
+            if not isinstance(event.message, TextMessage):
+                continue
 
-        user_id = event.source.user_id
-        user_message = event.message.text
+            user_id = event.source.user_id
+            user_message = event.message.text
 
-        logger.info(f"Received message from user {user_id}: {user_message}")
+            logger.info(f"Received message from user {user_id}: {user_message}")
 
-        # 檢查訊息計數是否需要重置
-        if user_id in user_message_counts:
-            if datetime.now() >= user_message_counts[user_id]['reset_time']:
+            # 檢查訊息計數是否需要重置
+            if user_id in user_message_counts:
+                if datetime.now() >= user_message_counts[user_id]['reset_time']:
+                    reset_user_count(user_id)
+            else:
                 reset_user_count(user_id)
-        else:
-            reset_user_count(user_id)
 
-        # 檢查用戶是否超過每日限制
-        if user_message_counts[user_id]['count'] >= USER_DAILY_LIMIT:
-            logger.info(f"User {user_id} exceeded daily limit")
+            # 檢查用戶是否超過每日限制
+            if user_message_counts[user_id]['count'] >= USER_DAILY_LIMIT:
+                logger.info(f"User {user_id} exceeded daily limit")
+                await line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text="您今天的用量已經超過，請明天再詢問。")
+                )
+                continue
+
+            # 處理特殊請求（如介紹）
+            if "介紹" in user_message or "你是誰" in user_message:
+                await line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text=introduction_message)
+                )
+                continue
+
+            # 檢查用戶是否要求搜尋某個內容
+            if "搜尋" in user_message:
+                search_query = user_message.replace("搜尋", "").strip()
+                # 使用背景任務進行網頁搜尋
+                background_tasks.add_task(handle_web_search_response, event.reply_token, search_query)
+                continue
+
+            # 呼叫 OpenAI 助手
+            result_text = await call_openai_chat_api(user_message)
+            
+            # 更新用戶訊息計數
+            user_message_counts[user_id]['count'] += 1
+
+            # 回應用戶訊息
             await line_bot_api.reply_message(
                 event.reply_token,
-                TextSendMessage(text="您今天的用量已經超過，請明天再詢問。")
+                TextSendMessage(text=result_text)
             )
-            continue
 
-        # 處理特殊請求（如介紹）
-        if "介紹" in user_message or "你是誰" in user_message:
-            await line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text=introduction_message)
-            )
-            continue
+        return JSONResponse(status_code=200, content={"message": "OK"})  # 確保返回 200
 
-        # 檢查用戶是否要求搜尋某個內容
-        if "搜尋" in user_message:
-            search_query = user_message.replace("搜尋", "").strip()
-            # 使用背景任務進行網頁搜尋
-            background_tasks.add_task(handle_web_search_response, event.reply_token, search_query)
-            continue
-
-        # 呼叫 OpenAI 助手
-        result_text = await call_openai_chat_api(user_message)
-        
-        # 更新用戶訊息計數
-        user_message_counts[user_id]['count'] += 1
-
-        # 回應用戶訊息
-        await line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(text=result_text)
-        )
-
-    return 'OK'
+    except Exception as e:
+        logger.error(f"Exception occurred: {e}")
+        return JSONResponse(status_code=200, content={"message": "OK"})  # 確保返回 200
 
 # 背景任務處理
 async def handle_web_search_response(reply_token, search_query):
