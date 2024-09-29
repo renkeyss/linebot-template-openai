@@ -41,7 +41,7 @@ def reset_user_count(user_id):
 
 # 查詢 OpenAI Storage Vector Store
 def search_vector_store(query):
-    vector_store_id = 'vs_O4EC1xmZuHy3WiSlcmklQgsR'  # Vector Store ID
+    vector_store_id = 'vs_jj52MF5jDccTdN7bqi2Dl7UL'  # Vector Store ID
     api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
     
     if not api_key:
