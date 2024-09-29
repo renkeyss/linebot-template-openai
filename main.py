@@ -161,7 +161,6 @@ async def handle_callback(request: Request, background_tasks: BackgroundTasks):
     try:
         signature = request.headers['X-Line-Signature']
 
-        # get request body as text
         body = await request.body()
         logger.info(f"Request body: {body.decode()}")
         body = body.decode()
@@ -230,8 +229,15 @@ async def handle_callback(request: Request, background_tasks: BackgroundTasks):
 
 # 背景任務處理
 async def handle_web_search_response(reply_token, search_query):
-    search_results = await perform_web_search(search_query)
-    await line_bot_api.reply_message(
-        reply_token,
-        TextSendMessage(text=search_results)
-    )
+    try:
+        search_results = await perform_web_search(search_query)
+        await line_bot_api.reply_message(
+            reply_token,
+            TextSendMessage(text=search_results)
+        )
+    except Exception as e:
+        logger.error(f"Error during web search: {e}")
+        await line_bot_api.reply_message(
+            reply_token,
+            TextSendMessage(text="兜售時出錯，請稍後再試。")
+        )
