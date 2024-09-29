@@ -108,8 +108,11 @@ async def call_openai_chat_api(user_message):
 # 網頁搜尋功能
 async def perform_web_search(query):
     search_url = f"https://www.google.com/search?q={query}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    }
     async with aiohttp.ClientSession() as session:
-        async with session.get(search_url) as response:
+        async with session.get(search_url, headers=headers) as response:  # 加入 headers
             if response.status != 200:
                 logger.error(f"Failed to retrieve search results: HTTP {response.status}")
                 return "抱歉，無法取得搜尋結果。"
@@ -120,12 +123,14 @@ def parse_search_results(html):
     soup = BeautifulSoup(html, 'html.parser')
     results = []
     
-    for g in soup.find_all('div', class_='BVG0Nb'):
+    # 解析 Google 搜尋結果
+    for g in soup.find_all('div', class_='g'):  # 使用 'g' 分類的結果
         title = g.find('h3')
-        if title:
-            link = g.find_parent('a')['href']
-            results.append(f"{title.text}: {link}")
-    
+        link = g.find('a', href=True)
+
+        if title and link:
+            results.append(f"{title.text}: {link['href']}")
+
     return "\n".join(results) if results else "沒有找到相關的搜尋結果。"
 
 # 獲取 channel_secret 和 channel_access_token
