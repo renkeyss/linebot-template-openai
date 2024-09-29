@@ -3,6 +3,7 @@
 import os
 import sys
 import logging
+import aiohttp
 from datetime import datetime, timedelta
 from fastapi import Request, FastAPI, HTTPException
 from linebot import (
@@ -45,6 +46,7 @@ def reset_user_count(user_id):
 # 查詢 Pinecone
 def search_pinecone(query):
     try:
+        # 查詢 Pinecone 並獲取最接近的 5 條資料
         response = index.query(queries=[query], top_k=5)
         logger.info(f"Response from Pinecone: {response}")
         return response
@@ -63,7 +65,7 @@ async def call_openai_chat_api(user_message):
     if pinecone_response and 'matches' in pinecone_response:
         knowledge_items = pinecone_response['matches']
         if knowledge_items:
-            # 整合知識庫資料
+            # 更新此行，以正確提取從 Pinecone 返回的元數據
             knowledge_content = "\n".join(item['metadata']['content'] for item in knowledge_items)
 
     # 組合最終訊息
