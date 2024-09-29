@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 
+import openai
 import os
 import sys
-import logging
 import aiohttp
+import requests
 from datetime import datetime, timedelta
 from fastapi import Request, FastAPI, HTTPException
 from linebot import (
@@ -16,20 +17,15 @@ from linebot.exceptions import (
 from linebot.models import (
     MessageEvent, TextMessage, TextSendMessage,
 )
-from dotenv import load_dotenv
-import pinecone
+from dotenv import load_dotenv, find_dotenv
+import logging
 
 # 設置日誌紀錄
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # 讀取環境變數
-_ = load_dotenv()
-
-# 初始化 Pinecone
-pinecone.init(api_key=os.getenv('PINECONE_API_KEY'), environment=os.getenv('PINECONE_ENVIRONMENT'))
-index_name = 'your_index_name'  # 將此處替換為你的 Pinecone 索引名稱
-index = pinecone.Index(index_name)
+_ = load_dotenv(find_dotenv())
 
 # Dictionary to store user message counts and reset times
 user_message_counts = {}
@@ -43,31 +39,56 @@ def reset_user_count(user_id):
         'reset_time': datetime.now() + timedelta(days=1)
     }
 
-# 查詢 Pinecone
-def search_pinecone(query):
-    try:
-        # 查詢 Pinecone 並獲取最接近的 5 條資料
-        response = index.query(queries=[query], top_k=5)
-        logger.info(f"Response from Pinecone: {response}")
-        return response
-    except Exception as e:
-        logger.error(f"Error querying Pinecone: {e}")
+# 查詢 OpenAI Storage Vector Store
+def search_vector_store(query):
+    vector_store_id = 'vs_bN5apQ49HPaIqMFgXk5mbg5i'  # 更新 Vector Store ID
+    api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
+    
+    if not api_key:
+        logger.error("API key is not set")
+        return None
+
+    url = f"https://api.openai.com/v1/vector_stores/{vector_store_id}"
+    
+    payload = {
+        "query": query
+    }
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "OpenAI-Beta": "assistants=v2"
+    }
+
+    logger.info(f"Sending request to Vector Store with query: {query}")
+    
+    response = requests.post(url, json=payload, headers=headers)
+    
+    if response.status_code == 200:
+        logger.info(f"Response from Vector Store: {response.json()}")
+        return response.json()  # 假設回應返回 JSON
+    else:
+        logger.error(f"Error: Failed to search Vector Store, HTTP code: {response.status_code}, error info: {response.text}")
         return None
 
 # 呼叫 OpenAI Chat API
 async def call_openai_chat_api(user_message):
+    openai.api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
+    
     assistant_id = 'asst_Cy9VWpQy2XiQ1wfvNlu3rst8'  # 更新助手 ID
 
     # 首先檢查知識庫
-    pinecone_response = search_pinecone(user_message)
+    vector_store_response = search_vector_store(user_message)
     knowledge_content = ""
     
-    if pinecone_response and 'matches' in pinecone_response:
-        knowledge_items = pinecone_response['matches']
+    if vector_store_response and "results" in vector_store_response:
+        knowledge_items = vector_store_response["results"]
         if knowledge_items:
-            # 更新此行，以正確提取從 Pinecone 返回的元數據
-            knowledge_content = "\n".join(item['metadata']['content'] for item in knowledge_items)
-
+            # 整合知識庫資料
+            knowledge_content = "\n".join(item['content'] for item in knowledge_items)
+        else:
+            logger.warning("No knowledge items found in the vector store response.")
+    
     # 組合最終訊息
     user_message = f"{user_message}\n相關知識庫資料：\n{knowledge_content}" if knowledge_content else user_message
 
