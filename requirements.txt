@@ -4,7 +4,6 @@ uvicorn[standard]
 openai==0.28.1
 python-dotenv
 aiohttp
-pinecone
 pinecone[grpc]
     langchain-pinecone
     langchain-openai
