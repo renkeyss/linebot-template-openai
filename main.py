@@ -19,6 +19,7 @@ from linebot.models import (
 )
 from dotenv import load_dotenv, find_dotenv
 import logging
+from bs4 import BeautifulSoup
 
 # 設置日誌紀錄
 logging.basicConfig(level=logging.INFO)
@@ -104,6 +105,29 @@ async def call_openai_chat_api(user_message):
         logger.error(f"Error calling OpenAI assistant: {e}")
         return "Error: 系統出現錯誤，請稍後再試。"
 
+# 網頁搜尋功能
+async def perform_web_search(query):
+    search_url = f"https://www.google.com/search?q={query}"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(search_url) as response:
+            if response.status != 200:
+                logger.error(f"Failed to retrieve search results: HTTP {response.status}")
+                return "抱歉，無法取得搜尋結果。"
+            html = await response.text()
+            return parse_search_results(html)
+
+def parse_search_results(html):
+    soup = BeautifulSoup(html, 'html.parser')
+    results = []
+    
+    for g in soup.find_all('div', class_='BVG0Nb'):
+        title = g.find('h3')
+        if title:
+            link = g.find_parent('a')['href']
+            results.append(f"{title.text}: {link}")
+    
+    return "\n".join(results) if results else "沒有找到相關的搜尋結果。"
+
 # 獲取 channel_secret 和 channel_access_token
 channel_secret = os.getenv('ChannelSecret', None)
 channel_access_token = os.getenv('ChannelAccessToken', None)
@@ -176,6 +200,16 @@ async def handle_callback(request: Request):
             )
             continue
 
+        # 檢查用戶是否要求搜尋某個內容
+        if "搜尋" in user_message:
+            search_query = user_message.replace("搜尋", "").strip()
+            search_results = await perform_web_search(search_query)
+            await line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=search_results)
+            )
+            continue
+
         # 呼叫 OpenAI 助手
         result_text = await call_openai_chat_api(user_message)
         
@@ -189,4 +223,3 @@ async def handle_callback(request: Request):
         )
 
     return 'OK'
-
