@@ -86,6 +86,8 @@ async def call_openai_chat_api(user_message):
         if knowledge_items:
             # 整合知識庫資料
             knowledge_content = "\n".join(item['content'] for item in knowledge_items)
+        else:
+            logger.warning("No knowledge items found in the vector store response.")
     
     # 組合最終訊息
     user_message = f"{user_message}\n相關知識庫資料：\n{knowledge_content}" if knowledge_content else user_message
