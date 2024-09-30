@@ -77,7 +77,8 @@ def search_vector_store(query):
 async def call_openai_chat_api(user_message):
     openai.api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
     
-    assistant_id = 'asst_HVKXE6R3ZcGb6oW6fDEpbdOi'  # 指定助手 ID
+    # assistant_id = 'asst_HVKXE6R3ZcGb6oW6fDEpbdOi'  # 指定助手 ID
+    assistant_id = 'vs_O4EC1xmZuHy3WiSlcmklQgsR'
 
     # 首先檢查知識庫
     vector_store_response = search_vector_store(user_message)
