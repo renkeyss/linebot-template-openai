@@ -1,5 +1,3 @@
-
-
 # -*- coding: utf-8 -*-
 
 import openai
@@ -42,7 +40,7 @@ def reset_user_count(user_id):
     }
 
 # 查詢 OpenAI Storage Vector Store
-def search_vector_store(query):
+def search_vector_store(query_embedding):
     vector_store_id = 'vs_QHeBHesKoOkuUQa7scnxls6U'  # Vector Store ID
     api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
     
@@ -50,19 +48,19 @@ def search_vector_store(query):
         logger.error("API key is not set")
         return None
 
-    url = f"https://api.openai.com/v1/vector_stores/{vector_store_id}"
+    url = f"https://api.openai.com/v1/vector_stores/{vector_store_id}/search"  # 假設這是正確的 URL
     
     payload = {
-        "query": query
+        "embedding": query_embedding.tolist(),  # 確保嵌入是列表格式
+        "k": 5  # 返回前 5 個相似結果
     }
     
     headers = {
         "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "OpenAI-Beta": "assistants=v2"
+        "Content-Type": "application/json"
     }
 
-    logger.info(f"Sending request to Vector Store with query: {query}")
+    logger.info(f"Sending request to Vector Store with embedding query.")
     
     response = requests.post(url, json=payload, headers=headers)
     
@@ -73,39 +71,19 @@ def search_vector_store(query):
         logger.error(f"Error: Failed to search Vector Store, HTTP code: {response.status_code}, error info: {response.text}")
         return None
 
-# 呼叫 OpenAI Chat API
-async def call_openai_chat_api(user_message):
+# 呼叫 OpenAI 嵌入 API
+async def call_openai_embedding_api(user_message):
     openai.api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
-    
-    # assistant_id = 'asst_HVKXE6R3ZcGb6oW6fDEpbdOi'  # 指定助手 ID
-    assistant_id = 'asst_ShZXAJwKlokkj9rNhRi2f6pG'
-
-    # 首先檢查知識庫
-    vector_store_response = search_vector_store(user_message)
-    knowledge_content = ""
-    
-    if vector_store_response and "results" in vector_store_response:
-        knowledge_items = vector_store_response["results"]
-        if knowledge_items:
-            # 整合知識庫資料
-            knowledge_content = "\n".join(item['content'] for item in knowledge_items)
-    
-    # 組合最終訊息
-    user_message = f"{user_message}\n相關知識庫資料：\n{knowledge_content}" if knowledge_content else user_message
 
     try:
-        response = await openai.ChatCompletion.acreate(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": f"Assistant ID: {assistant_id}. 你是一個樂於助人的助手，請使用繁體中文回覆。"},
-                {"role": "user", "content": user_message}
-            ]
+        embedding_response = await openai.Embedding.acreate(
+            model="text-embedding-ada-002",
+            input=user_message
         )
-        logger.info(f"Response from OpenAI assistant: {response.choices[0]['message']['content']}")
-        return response.choices[0]['message']['content']
+        return embedding_response['data'][0]['embedding']  # 取得數據的嵌入
     except Exception as e:
-        logger.error(f"Error calling OpenAI assistant: {e}")
-        return "Error: 系統出現錯誤，請稍後再試。"
+        logger.error(f"Error calling OpenAI embedding API: {e}")
+        return None
 
 # 獲取 channel_secret 和 channel_access_token
 channel_secret = os.getenv('ChannelSecret', None)
@@ -179,16 +157,36 @@ async def handle_callback(request: Request):
             )
             continue
 
-        # 呼叫 OpenAI 助手
-        result_text = await call_openai_chat_api(user_message)
+        # 呼叫 OpenAI 嵌入 API
+        query_embedding = await call_openai_embedding_api(user_message)
         
+        if query_embedding is None:
+            await line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="無法生成嵌入，請稍後重試。")
+            )
+            continue
+        
+        # 查詢向量儲存
+        vector_store_response = search_vector_store(query_embedding)
+
+        knowledge_content = ""
+        if vector_store_response and "results" in vector_store_response:
+            knowledge_items = vector_store_response["results"]
+            if knowledge_items:
+                # 整合知識庫資料
+                knowledge_content = "\n".join(item['content'] for item in knowledge_items)
+
+        # 構建最終響應
+        response_text = knowledge_content if knowledge_content else "沒有找到相關資料。"
+
         # 更新用戶訊息計數
         user_message_counts[user_id]['count'] += 1
 
         # 回應用戶訊息
         await line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text=result_text)
+            TextSendMessage(text=response_text)
         )
 
     return 'OK'
