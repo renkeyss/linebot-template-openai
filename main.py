@@ -62,11 +62,11 @@ def search_vector_store(query_embedding):
         logger.error("API key is not set")
         return None
 
-    url = f"https://api.openai.com/v1/vectorstores/vs_bN5apQ49HPaIqMFgXk5mbg5i"  # 假設這是正確的 URL
-    
+    url = f"https://api.openai.com/v1/vectorstores/{vector_store_id}/query"  # 假設這是正確的 URL
+
     payload = {
-        "embedding": query_embedding,  # 確保嵌入是列表格式
-        "k": 5  # 返回前 5 個相似結果
+        "embedding": [query_embedding],  # 確保嵌入是列表格式
+        "top_k": 5  # 返回前 5 個相似結果
     }
     
     headers = {
