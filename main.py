@@ -1,5 +1,3 @@
-
-
 # -*- coding: utf-8 -*-
 
 import openai
@@ -42,7 +40,7 @@ def reset_user_count(user_id):
     }
 
 # 查詢 OpenAI Storage Vector Store
-def search_vector_store(query):
+def search_openai(query):
     vector_store_id = 'vs_QHeBHesKoOkuUQa7scnxls6U'  # Vector Store ID
     api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
     
@@ -77,15 +75,14 @@ def search_vector_store(query):
 async def call_openai_chat_api(user_message):
     openai.api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
     
-    # assistant_id = 'asst_HVKXE6R3ZcGb6oW6fDEpbdOi'  # 指定助手 ID
     assistant_id = 'asst_ShZXAJwKlokkj9rNhRi2f6pG'
 
-    # 首先檢查知識庫
-    vector_store_response = search_vector_store(user_message)
+    # 進行搜尋
+    search_results = search_openai(user_message)
     knowledge_content = ""
     
-    if vector_store_response and "results" in vector_store_response:
-        knowledge_items = vector_store_response["results"]
+    if search_results and "results" in search_results:
+        knowledge_items = search_results["results"]
         if knowledge_items:
             # 整合知識庫資料
             knowledge_content = "\n".join(item['content'] for item in knowledge_items)
