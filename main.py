@@ -55,14 +55,14 @@ async def call_openai_embedding_api(user_message):
 
 # 查詢 OpenAI Storage Vector Store
 def search_vector_store(query_embedding):
-    vector_store_id = 'vs_QHeBHesKoOkuUQa7scnxls6U'  # Vector Store ID
+    vector_store_id = 'vs_bN5apQ49HPaIqMFgXk5mbg5i'  # Vector Store ID
     api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
     
     if not api_key:
         logger.error("API key is not set")
         return None
 
-    url = f"https://api.openai.com/v1/vector_stores/{vector_store_id}/search"  # 假設這是正確的 URL
+    url = f"https://platform.openai.com/storage/vector_stores/vs_bN5apQ49HPaIqMFgXk5mbg5i/search"  # 假設這是正確的 URL
     
     payload = {
         "embedding": query_embedding,  # 確保嵌入是列表格式
