@@ -123,7 +123,7 @@ parser = WebhookParser(channel_secret)
 
 # Introduction message
 introduction_message = (
-    "我是小助理。"
+    "我是彰化基督教醫院 內分泌科小助理，您有任何關於：糖尿病、高血壓及內分泌的相關問題都可以問我。"
 )
 
 @app.post("/callback")
@@ -189,3 +189,4 @@ async def handle_callback(request: Request):
         )
 
     return 'OK'
+
