@@ -27,6 +27,12 @@ logger = logging.getLogger(__name__)
 # 讀取環境變數
 _ = load_dotenv(find_dotenv())
 
+# PROJECTS 資訊
+PROJECT_NAME = "CCH_DM"
+ASSISTANT_ID = "asst_ShZXAJwKlokkj9rNhRi2f6pG"
+VECTOR_STORE_NAME = "CCHDM"
+VECTOR_STORE_ID = "vs_QHeBHesKoOkuUQa7scnxls6U"
+
 # Dictionary to store user message counts and reset times
 user_message_counts = {}
 
@@ -55,14 +61,13 @@ async def call_openai_embedding_api(user_message):
 
 # 查詢 OpenAI Storage Vector Store
 def search_vector_store(query_embedding):
-    vector_store_id = 'vs_bN5apQ49HPaIqMFgXk5mbg5i'  # Vector Store ID
     api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
     
     if not api_key:
         logger.error("API key is not set")
         return None
 
-    url = f"https://api.openai.com/v1/vectorstores/{vector_store_id}/query"  # 假設這是正確的 URL
+    url = f"https://api.openai.com/v1/vectorstores/{VECTOR_STORE_ID}/query"  # 使用新的 Vector Store ID
 
     payload = {
         "embedding": query_embedding,  # 確保嵌入是列表格式
