@@ -39,38 +39,6 @@ def reset_user_count(user_id):
         'reset_time': datetime.now() + timedelta(days=1)
     }
 
-# 查詢 OpenAI Storage Vector Store
-def search_vector_store(query_embedding):
-    vector_store_id = 'vs_QHeBHesKoOkuUQa7scnxls6U'  # Vector Store ID
-    api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
-    
-    if not api_key:
-        logger.error("API key is not set")
-        return None
-
-    url = f"https://api.openai.com/v1/vector_stores/{vector_store_id}/search"  # 假設這是正確的 URL
-    
-    payload = {
-        "embedding": query_embedding.tolist(),  # 確保嵌入是列表格式
-        "k": 5  # 返回前 5 個相似結果
-    }
-    
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-
-    logger.info(f"Sending request to Vector Store with embedding query.")
-    
-    response = requests.post(url, json=payload, headers=headers)
-    
-    if response.status_code == 200:
-        logger.info(f"Response from Vector Store: {response.json()}")
-        return response.json()  # 假設回應返回 JSON
-    else:
-        logger.error(f"Error: Failed to search Vector Store, HTTP code: {response.status_code}, error info: {response.text}")
-        return None
-
 # 呼叫 OpenAI 嵌入 API
 async def call_openai_embedding_api(user_message):
     openai.api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
@@ -83,6 +51,37 @@ async def call_openai_embedding_api(user_message):
         return embedding_response['data'][0]['embedding']  # 取得數據的嵌入
     except Exception as e:
         logger.error(f"Error calling OpenAI embedding API: {e}")
+        return None
+
+# 查詢 OpenAI Storage Vector Store
+def search_vector_store(query_embedding):
+    vector_store_id = 'vs_QHeBHesKoOkuUQa7scnxls6U'  # Vector Store ID
+    api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
+    
+    if not api_key:
+        logger.error("API key is not set")
+        return None
+
+    url = f"https://api.openai.com/v1/vector_stores/{vector_store_id}/search"  # 假設這是正確的 URL
+    
+    payload = {
+        "embedding": query_embedding,  # 確保嵌入是列表格式
+        "k": 5  # 返回前 5 個相似結果
+    }
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    logger.info(f"Sending request to Vector Store with query embedding.")
+    
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        response.raise_for_status()  # 檢查如果回應是個錯誤
+        return response.json()  # 假設回應返回 JSON
+    except Exception as e:
+        logger.error(f"Error: Failed to search Vector Store, {e}")
         return None
 
 # 獲取 channel_secret 和 channel_access_token
