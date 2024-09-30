@@ -51,7 +51,7 @@ async def call_openai_embedding_api(user_message):
 
     try:
         embedding_response = await openai.Embedding.acreate(
-            model="text-embedding-ada-002",
+            model="gpt-3.5-turbo",
             input=user_message
         )
         return embedding_response['data'][0]['embedding']  # 取得數據的嵌入
