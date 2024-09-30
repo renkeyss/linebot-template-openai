@@ -166,15 +166,29 @@ async def handle_callback(request: Request):
             )
             continue
         
+        logger.info(f"Generated embedding: {query_embedding}")  # 記錄生成的嵌入
+        
         # 查詢向量儲存
         vector_store_response = search_vector_store(query_embedding)
+
+        if vector_store_response is None:
+            await line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="無法查詢向量儲存，請稍後重試。")
+            )
+            continue
+        
+        logger.info(f"Response from Vector Store: {vector_store_response}")  # 記錄查詢結果
 
         knowledge_content = ""
         if vector_store_response and "results" in vector_store_response:
             knowledge_items = vector_store_response["results"]
             if knowledge_items:
-                # 整合知識庫資料
                 knowledge_content = "\n".join(item['content'] for item in knowledge_items)
+            else:
+                logger.warning("No items found in vector store results.")
+        else:
+            logger.error("No results found in the response from vector store.")
 
         # 構建最終響應
         response_text = knowledge_content if knowledge_content else "沒有找到相關資料。"
