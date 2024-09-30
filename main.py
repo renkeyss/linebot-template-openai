@@ -55,7 +55,7 @@ async def call_openai_embedding_api(user_message):
 
 # 查詢 OpenAI Storage Vector Store
 def search_vector_store(query_embedding):
-    vector_store_id = 'vs_bN5apQ49HPaIqMFgXk5mbg5i'  # Vector Store ID
+    vector_store_id = 'vs_QHeBHesKoOkuUQa7scnxls6U'  # Vector Store ID
     api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
     
     if not api_key:
@@ -71,7 +71,8 @@ def search_vector_store(query_embedding):
     
     headers = {
         "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "OpenAI-Beta": "assistants=v2"  # 包含 OpenAI-Beta 標頭
     }
 
     logger.info(f"Sending request to Vector Store with query embedding: {query_embedding}")
