@@ -62,7 +62,7 @@ def search_vector_store(query_embedding):
         logger.error("API key is not set")
         return None
 
-    url = f"https://api.openai.com/v2/vector_stores/{vector_store_id}/search"  # 假設這是正確的 URL
+    url = f"https://api.openai.com/v1/vector_stores/{vector_store_id}/search"  # 假設這是正確的 URL
     
     payload = {
         "embedding": query_embedding,  # 確保嵌入是列表格式
@@ -72,7 +72,7 @@ def search_vector_store(query_embedding):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
-        "OpenAI-Beta": "assistants=v2"  # 包含 OpenAI-Beta 標頭
+        "OpenAI-Beta": "assistants=v1"  # 包含 OpenAI-Beta 標頭
     }
 
     logger.info(f"Sending request to Vector Store with query embedding: {query_embedding}")
