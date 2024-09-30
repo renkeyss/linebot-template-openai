@@ -65,7 +65,7 @@ def search_vector_store(query_embedding):
     url = f"https://api.openai.com/v1/vectorstores/{vector_store_id}/query"  # 假設這是正確的 URL
 
     payload = {
-        "embedding": [query_embedding],  # 確保嵌入是列表格式
+        "embedding": query_embedding,  # 確保嵌入是列表格式
         "top_k": 5  # 返回前 5 個相似結果
     }
     
@@ -76,11 +76,14 @@ def search_vector_store(query_embedding):
     }
 
     logger.info(f"Sending request to Vector Store with query embedding: {query_embedding}")
+    logger.info(f"Payload: {payload}")
+    logger.info(f"Headers: {headers}")
     
     try:
         response = requests.post(url, json=payload, headers=headers)
         response.raise_for_status()  # 檢查如果回應是個錯誤
         logger.info("Successfully retrieved from Vector Store.")
+        logger.info(f"Response Content: {response.content}")
         return response.json()  # 假設回應返回 JSON
     except requests.exceptions.HTTPError as http_err:
         logger.error(f"HTTP error occurred: {http_err}")
