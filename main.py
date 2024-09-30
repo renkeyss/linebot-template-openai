@@ -1,3 +1,5 @@
+
+
 # -*- coding: utf-8 -*-
 
 import openai
@@ -40,7 +42,7 @@ def reset_user_count(user_id):
     }
 
 # 查詢 OpenAI Storage Vector Store
-def search_openai(query):
+def search_vector_store(query):
     vector_store_id = 'vs_QHeBHesKoOkuUQa7scnxls6U'  # Vector Store ID
     api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
     
@@ -75,14 +77,15 @@ def search_openai(query):
 async def call_openai_chat_api(user_message):
     openai.api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
     
+    # assistant_id = 'asst_HVKXE6R3ZcGb6oW6fDEpbdOi'  # 指定助手 ID
     assistant_id = 'asst_ShZXAJwKlokkj9rNhRi2f6pG'
 
-    # 進行搜尋
-    search_results = search_openai(user_message)
+    # 首先檢查知識庫
+    vector_store_response = search_vector_store(user_message)
     knowledge_content = ""
     
-    if search_results and "results" in search_results:
-        knowledge_items = search_results["results"]
+    if vector_store_response and "results" in vector_store_response:
+        knowledge_items = vector_store_response["results"]
         if knowledge_items:
             # 整合知識庫資料
             knowledge_content = "\n".join(item['content'] for item in knowledge_items)
@@ -91,7 +94,7 @@ async def call_openai_chat_api(user_message):
     user_message = f"{user_message}\n相關知識庫資料：\n{knowledge_content}" if knowledge_content else user_message
 
     try:
-        response = await openai.ChatCompletion.acreate(
+        response = await openai.Embedding.acreate(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": f"Assistant ID: {assistant_id}. 你是一個樂於助人的助手，請使用繁體中文回覆。"},
