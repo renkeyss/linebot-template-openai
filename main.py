@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import openai
 import os
 import sys
 import aiohttp
@@ -19,6 +18,7 @@ from linebot.models import (
 )
 from dotenv import load_dotenv, find_dotenv
 import logging
+import random
 
 # 設置日誌紀錄
 logging.basicConfig(level=logging.INFO)
@@ -45,19 +45,10 @@ def reset_user_count(user_id):
         'reset_time': datetime.now() + timedelta(days=1)
     }
 
-# 呼叫 OpenAI 嵌入 API
-async def call_openai_embedding_api(user_message):
-    openai.api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
-
-    try:
-        embedding_response = await openai.Embedding.acreate(
-            model="gpt-3.5-turbo",
-            input=user_message
-        )
-        return embedding_response['data'][0]['embedding']  # 取得數據的嵌入
-    except Exception as e:
-        logger.error(f"Error calling OpenAI embedding API: {e}")
-        return None
+# 生成隨機嵌入（模擬功能）
+def generate_embedding(user_message):
+    # 假設模型輸出的是一個128維的隨機向量
+    return [random.uniform(-1, 1) for _ in range(128)]
 
 # 查詢 OpenAI Storage Vector Store
 def search_vector_store(query_embedding):
@@ -170,15 +161,8 @@ async def handle_callback(request: Request):
             )
             continue
 
-        # 呼叫 OpenAI 嵌入 API
-        query_embedding = await call_openai_embedding_api(user_message)
-        
-        if query_embedding is None:
-            await line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="無法生成嵌入，請稍後重試。")
-            )
-            continue
+        # 使用自訂函數生成嵌入
+        query_embedding = generate_embedding(user_message)
         
         logger.info(f"Generated embedding: {query_embedding}")  # 記錄生成的嵌入
         
