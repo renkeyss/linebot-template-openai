@@ -31,7 +31,7 @@ _ = load_dotenv(find_dotenv())
 user_message_counts = {}
 
 # User daily limit
-USER_DAILY_LIMIT = 5
+USER_DAILY_LIMIT = 50
 
 def reset_user_count(user_id):
     user_message_counts[user_id] = {
@@ -123,7 +123,7 @@ parser = WebhookParser(channel_secret)
 
 # Introduction message
 introduction_message = (
-    "我是小助理。"
+    "我是 彰化基督教醫院 內分泌暨新陳代謝科 小助理，如果您有任何關於：糖尿病、高血壓、甲狀腺的相關問題，您可以詢問我。但基本上我是由大型語言模型訓練，所以您有任何疑問建議您要向您的醫療團隊做進一步的諮詢，謝謝！"
 )
 
 @app.post("/callback")
