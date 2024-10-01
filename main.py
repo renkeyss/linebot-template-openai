@@ -91,7 +91,7 @@ async def call_openai_chat_api(user_message):
     user_message = f"{user_message}\n相關知識庫資料：\n{knowledge_content}" if knowledge_content else user_message
 
     try:
-        response = await openai.Model(
+        response = await openai.Embedding.acreate(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": f"Assistant ID: {assistant_id}. 你是一個樂於助人的助手，請使用繁體中文回覆。"},
