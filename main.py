@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import openai
 import os
 import sys
 import aiohttp
@@ -71,10 +70,8 @@ def search_vector_store(query):
         logger.error(f"Error: Failed to search Vector Store, HTTP code: {response.status_code}, error info: {response.text}")
         return None
 
-# 呼叫 OpenAI Chat API
-async def call_openai_chat_api(user_message):
-    openai.api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
-    
+# 使用指定的助手處理請求
+async def call_assistant(user_message):
     assistant_id = 'asst_Cy9VWpQy2XiQ1wfvNlu3rst8'  # 指定助手 ID
 
     # 首先檢查知識庫
@@ -90,19 +87,33 @@ async def call_openai_chat_api(user_message):
     # 組合最終訊息
     user_message = f"{user_message}\n相關知識庫資料：\n{knowledge_content}" if knowledge_content else user_message
 
+    # 替換成調用指定助手的邏輯
     try:
-        response = await openai.ChatCompletion.acreate(
-            model="gpt-3.5-turbo-1106",
-            messages=[
-                {"role": "system", "content": f"Assistant ID: {assistant_id}. 你是一個樂於助人的助手，請使用繁體中文回覆。"},
-                {"role": "user", "content": user_message}
-            ]
-        )
-        logger.info(f"Response from OpenAI assistant: {response.choices[0]['message']['content']}")
-        return response.choices[0]['message']['content']
+        response = await query_assistant_api(assistant_id, user_message)
+        logger.info(f"Response from assistant: {response}")
+        return response
     except Exception as e:
-        logger.error(f"Error calling OpenAI assistant: {e}")
+        logger.error(f"Error calling assistant: {e}")
         return "Error: 系統出現錯誤，請稍後再試。"
+
+# 自定義函數用於調用指定助手的 API
+async def query_assistant_api(assistant_id, message):
+    # 這裡是調用指定助手的 API 的邏輯
+    # 需要替換成實際的請求代碼
+    url = f"https://your-assistant-api-endpoint/{assistant_id}"
+    
+    payload = {
+        "message": message
+    }
+    
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, json=payload) as response:
+            if response.status == 200:
+                result = await response.json()
+                return result['response']  # 假設回應中有 'response' 欄位
+            else:
+                logger.error(f"Error: Failed to call assistant API, HTTP code: {response.status}")
+                return "Error: Assistant API out of service"
 
 # 獲取 channel_secret 和 channel_access_token
 channel_secret = os.getenv('ChannelSecret', None)
@@ -177,8 +188,8 @@ async def handle_callback(request: Request):
             )
             continue
 
-        # 呼叫 OpenAI 助手
-        result_text = await call_openai_chat_api(user_message)
+        # 呼叫指定助手
+        result_text = await call_assistant(user_message)
         
         # 更新用戶訊息計數
         user_message_counts[user_id]['count'] += 1
