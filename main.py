@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import openai
 import os
 import sys
 import aiohttp
@@ -18,7 +19,6 @@ from linebot.models import (
 )
 from dotenv import load_dotenv, find_dotenv
 import logging
-import random
 
 # 設置日誌紀錄
 logging.basicConfig(level=logging.INFO)
@@ -26,12 +26,6 @@ logger = logging.getLogger(__name__)
 
 # 讀取環境變數
 _ = load_dotenv(find_dotenv())
-
-# PROJECTS 資訊
-PROJECT_NAME = "CCH_DM"
-ASSISTANT_ID = "asst_ShZXAJwKlokkj9rNhRi2f6pG"
-VECTOR_STORE_NAME = "CCHDM"
-VECTOR_STORE_ID = "vs_QHeBHesKoOkuUQa7scnxls6U"
 
 # Dictionary to store user message counts and reset times
 user_message_counts = {}
@@ -45,49 +39,70 @@ def reset_user_count(user_id):
         'reset_time': datetime.now() + timedelta(days=1)
     }
 
-# 生成隨機嵌入（模擬功能）
-def generate_embedding(user_message):
-    # 假設模型輸出的是一個128維的隨機向量
-    return [random.uniform(-1, 1) for _ in range(128)]
-
 # 查詢 OpenAI Storage Vector Store
-def search_vector_store(query_embedding):
+def search_vector_store(query):
+    vector_store_id = 'vs_O4EC1xmZuHy3WiSlcmklQgsR'  # Vector Store ID
     api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
     
     if not api_key:
         logger.error("API key is not set")
         return None
 
-    url = f"https://api.openai.com/v1/vectorstores/{VECTOR_STORE_ID}/query"  # 使用新的 Vector Store ID
-
+    url = f"https://api.openai.com/v1/vector_stores/{vector_store_id}"
+    
     payload = {
-        "embedding": query_embedding,  # 確保嵌入是列表格式
-        "top_k": 5  # 返回前 5 個相似結果
+        "query": query
     }
     
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
-        "OpenAI-Beta": "assistants=v2"  # 包含 OpenAI-Beta 標頭
+        "OpenAI-Beta": "assistants=v2"
     }
 
-    logger.info(f"Sending request to Vector Store with query embedding: {query_embedding}")
-    logger.info(f"Payload: {payload}")
-    logger.info(f"Headers: {headers}")
+    logger.info(f"Sending request to Vector Store with query: {query}")
     
-    try:
-        response = requests.post(url, json=payload, headers=headers)
-        response.raise_for_status()  # 檢查如果回應是個錯誤
-        logger.info("Successfully retrieved from Vector Store.")
-        logger.info(f"Response Content: {response.content}")
+    response = requests.post(url, json=payload, headers=headers)
+    
+    if response.status_code == 200:
+        logger.info(f"Response from Vector Store: {response.json()}")
         return response.json()  # 假設回應返回 JSON
-    except requests.exceptions.HTTPError as http_err:
-        logger.error(f"HTTP error occurred: {http_err}")
-        logger.error(f"Response: {response.text}")
+    else:
+        logger.error(f"Error: Failed to search Vector Store, HTTP code: {response.status_code}, error info: {response.text}")
         return None
+
+# 呼叫 OpenAI Chat API
+async def call_openai_chat_api(user_message):
+    openai.api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
+    
+    assistant_id = 'asst_HVKXE6R3ZcGb6oW6fDEpbdOi'  # 指定助手 ID
+
+    # 首先檢查知識庫
+    vector_store_response = search_vector_store(user_message)
+    knowledge_content = ""
+    
+    if vector_store_response and "results" in vector_store_response:
+        knowledge_items = vector_store_response["results"]
+        if knowledge_items:
+            # 整合知識庫資料
+            knowledge_content = "\n".join(item['content'] for item in knowledge_items)
+    
+    # 組合最終訊息
+    user_message = f"{user_message}\n相關知識庫資料：\n{knowledge_content}" if knowledge_content else user_message
+
+    try:
+        response = await openai.ChatCompletion.acreate(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": f"Assistant ID: {assistant_id}. 你是一個樂於助人的助手，請使用繁體中文回覆。"},
+                {"role": "user", "content": user_message}
+            ]
+        )
+        logger.info(f"Response from OpenAI assistant: {response.choices[0]['message']['content']}")
+        return response.choices[0]['message']['content']
     except Exception as e:
-        logger.error(f"Error: Failed to search Vector Store, {e}")
-        return None
+        logger.error(f"Error calling OpenAI assistant: {e}")
+        return "Error: 系統出現錯誤，請稍後再試。"
 
 # 獲取 channel_secret 和 channel_access_token
 channel_secret = os.getenv('ChannelSecret', None)
@@ -108,7 +123,7 @@ parser = WebhookParser(channel_secret)
 
 # Introduction message
 introduction_message = (
-    "我是彰化基督教醫院 內分泌科小助理，您有任何關於：糖尿病、高血壓及內分泌的相關問題都可以問我。"
+    "我是小助理。"
 )
 
 @app.post("/callback")
@@ -161,43 +176,16 @@ async def handle_callback(request: Request):
             )
             continue
 
-        # 使用自訂函數生成嵌入
-        query_embedding = generate_embedding(user_message)
+        # 呼叫 OpenAI 助手
+        result_text = await call_openai_chat_api(user_message)
         
-        logger.info(f"Generated embedding: {query_embedding}")  # 記錄生成的嵌入
-        
-        # 查詢向量儲存
-        vector_store_response = search_vector_store(query_embedding)
-
-        if vector_store_response is None:
-            await line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="無法查詢向量儲存，請稍後重試。")
-            )
-            continue
-        
-        logger.info(f"Response from Vector Store: {vector_store_response}")  # 記錄查詢結果
-
-        knowledge_content = ""
-        if vector_store_response and "results" in vector_store_response:
-            knowledge_items = vector_store_response["results"]
-            if knowledge_items:
-                knowledge_content = "\n".join(item['content'] for item in knowledge_items)
-            else:
-                logger.warning("No items found in vector store results.")
-        else:
-            logger.error("No results found in the response from vector store.")
-
-        # 構建最終響應
-        response_text = knowledge_content if knowledge_content else "沒有找到相關資料。"
-
         # 更新用戶訊息計數
         user_message_counts[user_id]['count'] += 1
 
         # 回應用戶訊息
         await line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text=response_text)
+            TextSendMessage(text=result_text)
         )
 
     return 'OK'
