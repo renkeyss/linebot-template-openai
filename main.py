@@ -91,10 +91,10 @@ async def call_openai_chat_api(user_message):
     user_message = f"{user_message}\n相關知識庫資料：\n{knowledge_content}" if knowledge_content else user_message
 
     try:
-        response = await openai.ChatCompletion.acreate(
+        response = (
             model="gpt-3.5-turbo-1106",
             messages=[
-                {"role": "system", "content": f"Assistant ID: {asst_Cy9VWpQy2XiQ1wfvNlu3rst8}. 你是一個樂於助人的助手，請使用繁體中文回覆。"},
+                {"role": "system", "content": f"Assistant ID: {assistant_id}. 你是一個樂於助人的助手，請使用繁體中文回覆。"},
                 {"role": "user", "content": user_message}
             ]
         )
