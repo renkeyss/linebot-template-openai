@@ -70,7 +70,7 @@ def search_vector_store(query):
         logger.error(f"Error: Failed to search Vector Store, HTTP code: {response.status_code}, error info: {response.text}")
         return None
 
-# 使用指定的助手處理請求
+# 使用指定助手處理請求
 async def call_assistant(user_message):
     assistant_id = 'asst_Cy9VWpQy2XiQ1wfvNlu3rst8'  # 指定助手 ID
 
@@ -94,13 +94,12 @@ async def call_assistant(user_message):
         return response
     except Exception as e:
         logger.error(f"Error calling assistant: {e}")
-        return "Error: 系統出現錯誤，請稍後再試。"
+        return f"Error: 系統出現錯誤，詳細信息：{str(e)}"
 
 # 自定義函數用於調用指定助手的 API
 async def query_assistant_api(assistant_id, message):
     # 這裡是調用指定助手的 API 的邏輯
-    # 需要替換成實際的請求代碼
-    url = f"https://your-assistant-api-endpoint/{assistant_id}"
+    url = f"https://your-assistant-api-endpoint/{assistant_id}"  # 替換為實際的助手 API 端點
     
     payload = {
         "message": message
@@ -108,12 +107,16 @@ async def query_assistant_api(assistant_id, message):
     
     async with aiohttp.ClientSession() as session:
         async with session.post(url, json=payload) as response:
-            if response.status == 200:
+            try:
                 result = await response.json()
-                return result['response']  # 假設回應中有 'response' 欄位
-            else:
-                logger.error(f"Error: Failed to call assistant API, HTTP code: {response.status}")
-                return "Error: Assistant API out of service"
+                if response.status == 200:
+                    return result['response']  # 假設回應中有 'response' 欄位
+                else:
+                    logger.error(f"API Error: {response.status} - {result}")
+                    return "Error: Assistant API returned an error."
+            except Exception as e:
+                logger.error(f"Error parsing response: {e}")
+                return "Error: Assistant API returned a response that could not be parsed."
 
 # 獲取 channel_secret 和 channel_access_token
 channel_secret = os.getenv('ChannelSecret', None)
@@ -188,7 +191,7 @@ async def handle_callback(request: Request):
             )
             continue
 
-        # 呼叫指定助手
+        # 呼叫助手
         result_text = await call_assistant(user_message)
         
         # 更新用戶訊息計數
