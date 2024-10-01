@@ -41,7 +41,7 @@ def reset_user_count(user_id):
 
 # 查詢 OpenAI Storage Vector Store
 def search_vector_store(query):
-    vector_store_id = 'vs_ExHxm1cRGAXuONTCz0w865XZ'  # Vector Store ID
+    vector_store_id = 'vs_mDCiMdkMG9zz9Y4AMZ672eNI'  # Vector Store ID
     api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
     
     if not api_key:
@@ -75,7 +75,7 @@ def search_vector_store(query):
 async def call_openai_chat_api(user_message):
     openai.api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
     
-    assistant_id = 'asst_z7a44MaoMN7XRR6JdIOUwnEW'  # 指定助手 ID
+    assistant_id = 'asst_Cy9VWpQy2XiQ1wfvNlu3rst8'  # 指定助手 ID
 
     # 首先檢查知識庫
     vector_store_response = search_vector_store(user_message)
