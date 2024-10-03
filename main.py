@@ -76,7 +76,7 @@ async def call_openai_chat_api(user_message):
     openai.api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
     
     assistant_id = 'asst_Cy9VWpQy2XiQ1wfvNlu3rst8'  # 指定助手 ID
-
+    url = f"https://api.openai.com/v1/assistants/ {assistant_id}"
     # 首先檢查知識庫
     vector_store_response = search_vector_store(user_message)
     knowledge_content = ""
