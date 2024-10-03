@@ -31,7 +31,7 @@ _ = load_dotenv(find_dotenv())
 user_message_counts = {}
 
 # User daily limit
-USER_DAILY_LIMIT = 30
+USER_DAILY_LIMIT = 10
 
 def reset_user_count(user_id):
     user_message_counts[user_id] = {
@@ -45,7 +45,7 @@ async def call_openai_chat_api(user_message):
 
     try:
         response = await openai.ChatCompletion.acreate(
-            model="ft:gpt-3.5-turbo-1106:personal:input-20241003:AE9lHOQo",  # 使用調整後模型
+            model="ft:ft:gpt-3.5-turbo-1106:personal:input-20241003-02:AEBhrXwT",  # 使用調整後模型
             messages=[
                 {"role": "system", "content": "你是一個樂於助人的助手，請使用繁體中文回覆。"},
                 {"role": "user", "content": user_message}
