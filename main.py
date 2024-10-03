@@ -88,19 +88,13 @@ async def call_openai_chat_api(user_message, assistant_id, vector_store_id):
     user_message = f"{user_message}\n相關知識庫資料：\n{knowledge_content}" if knowledge_content else user_message
 
     try:
-     from openai import OpenAI
-client = OpenAI()
-
-completion = client.chat.completions.create(
-    model="gpt-4o",
-    messages=[
-        {"role": "system", "content": "You are a helpful assistant."},
-        {
-            "role": "user",
-            "content": "Write a haiku about recursion in programming."
-        }
-    ]
-)
+        response = await openai.ChatCompletion.acreate(
+            model="gpt-3.5-turbo-1106",
+            messages=[
+                {"role": "system", "content": f"Assistant ID: {assistant_id}. 你是一個樂於助人的助手，請使用繁體中文回覆。"},
+                {"role": "user", "content": user_message}
+            ]
+        )
         logger.info(f"Response from OpenAI assistant: {response.choices[0]['message']['content']}")
         return response.choices[0]['message']['content']
     except Exception as e:
