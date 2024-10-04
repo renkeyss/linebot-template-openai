@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import openai
+pip install --upgrade openai
 import os
 import sys
 import aiohttp
