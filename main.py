@@ -53,6 +53,9 @@ async def call_openai_assistant_api(user_message):
         )
         logger.info(f"Response from OpenAI assistant: {response}")
         return response['message']['content']  # 根據 API 文檔的格式提取回應內容
+    except openai.error.OpenAIError as e:
+        logger.error(f"OpenAI API Error: {e}")
+        return "Error: 系統出現錯誤，請稍後再試。"
     except Exception as e:
         logger.error(f"Error calling OpenAI assistant: {e}")
         return "Error: 系統出現錯誤，請稍後再試。"
