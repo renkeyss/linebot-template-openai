@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
 
 import openai
-pip install --upgrade openai
 import os
 import sys
 import aiohttp
-import requests
 from datetime import datetime, timedelta
 from fastapi import Request, FastAPI, HTTPException
 from linebot import (
@@ -20,6 +18,8 @@ from linebot.models import (
 )
 from dotenv import load_dotenv, find_dotenv
 import logging
+
+# 安裝 openai 套件的命令被移除，因為它應該在環境中進行安裝，而非於程式碼中。
 
 # 設置日誌紀錄
 logging.basicConfig(level=logging.INFO)
@@ -56,7 +56,10 @@ async def call_openai_assistant_api(user_message):
         return response['message']['content']  # 根據 API 文檔的格式提取回應內容
     except openai.error.OpenAIError as e:
         logger.error(f"OpenAI API Error: {e}")
-        return "Error: 系統出現錯誤，請稍後再試。"
+        return "抱歉，我無法處理您的請求，請稍後再試。"
+    except Exception as e:
+        logger.error(f"Unknown error while calling OpenAI assistant: {e}")
+        return "系統出現錯誤，請稍後再試。"
 
 # 獲取 channel_secret 和 channel_access_token
 channel_secret = os.getenv('ChannelSecret', None)
@@ -83,7 +86,7 @@ introduction_message = (
 
 @app.post("/callback")
 async def handle_callback(request: Request):
-    signature = request.headers['X-Line-Signature']
+    signature = request.headers.get('X-Line-Signature')
 
     # get request body as text
     body = await request.body()
@@ -97,9 +100,7 @@ async def handle_callback(request: Request):
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     for event in events:
-        if not isinstance(event, MessageEvent):
-            continue
-        if not isinstance(event.message, TextMessage):
+        if not isinstance(event, MessageEvent) or not isinstance(event.message, TextMessage):
             continue
 
         user_id = event.source.user_id
@@ -131,7 +132,7 @@ async def handle_callback(request: Request):
             )
             continue
 
-        # 呼叫 OpenAI 助手
+        # 呼叫 OpenAI 助手，並處理可能的錯誤
         result_text = await call_openai_assistant_api(user_message)
         
         # 更新用戶訊息計數
