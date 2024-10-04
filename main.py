@@ -39,20 +39,20 @@ def reset_user_count(user_id):
         'reset_time': datetime.now() + timedelta(days=1)
     }
 
-# 呼叫 OpenAI Chat API
-async def call_openai_chat_api(user_message):
+# 呼叫 OpenAI 助手 API
+async def call_openai_assistant_api(user_message):
     openai.api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
 
     try:
-        response = await openai.ChatCompletion.acreate(
-            model="ft:gpt-3.5-turbo-1106:personal:input-20241003-02:AEBhrXwT",  # 使用調整後模型
+        response = await openai.Assistants.create(
+            assistant_id='asst_HVKXE6R3ZcGb6oW6fDEpbdOi',  # 使用指定的助理 ID
+            vector_store_id='vs_O4EC1xmZuHy3WiSlcmklQgsR',  # 使用指定的向量存儲 ID
             messages=[
-                {"role": "system", "content": "你是一個樂於助人的助手，請使用繁體中文回覆。"},
                 {"role": "user", "content": user_message}
             ]
         )
-        logger.info(f"Response from OpenAI assistant: {response.choices[0]['message']['content']}")
-        return response.choices[0]['message']['content']
+        logger.info(f"Response from OpenAI assistant: {response}")
+        return response['message']['content']  # 根據 API 文檔的格式提取回應內容
     except Exception as e:
         logger.error(f"Error calling OpenAI assistant: {e}")
         return "Error: 系統出現錯誤，請稍後再試。"
@@ -131,7 +131,7 @@ async def handle_callback(request: Request):
             continue
 
         # 呼叫 OpenAI 助手
-        result_text = await call_openai_chat_api(user_message)
+        result_text = await call_openai_assistant_api(user_message)
         
         # 更新用戶訊息計數
         user_message_counts[user_id]['count'] += 1
