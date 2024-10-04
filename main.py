@@ -57,9 +57,6 @@ async def call_openai_assistant_api(user_message):
     except openai.error.OpenAIError as e:
         logger.error(f"OpenAI API Error: {e}")
         return "Error: 系統出現錯誤，請稍後再試。"
-    except Exception as e:
-        logger.error(f"Error calling OpenAI assistant: {e}")
-        return "Error: 系統出現錯誤，請稍後再試。"
 
 # 獲取 channel_secret 和 channel_access_token
 channel_secret = os.getenv('ChannelSecret', None)
