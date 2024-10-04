@@ -4,16 +4,13 @@ import openai
 import os
 import sys
 import aiohttp
-import requests
 from datetime import datetime, timedelta
 from fastapi import Request, FastAPI, HTTPException
 from linebot import (
     AsyncLineBotApi, WebhookParser
 )
 from linebot.aiohttp_async_http_client import AiohttpAsyncHttpClient
-from linebot.exceptions import (
-    InvalidSignatureError
-)
+from linebot.exceptions import InvalidSignatureError
 from linebot.models import (
     MessageEvent, TextMessage, TextSendMessage,
 )
