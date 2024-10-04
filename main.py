@@ -6,20 +6,12 @@ import sys
 import aiohttp
 from datetime import datetime, timedelta
 from fastapi import Request, FastAPI, HTTPException
-from linebot import (
-    AsyncLineBotApi, WebhookParser
-)
+from linebot import AsyncLineBotApi, WebhookParser
 from linebot.aiohttp_async_http_client import AiohttpAsyncHttpClient
-from linebot.exceptions import (
-    InvalidSignatureError
-)
-from linebot.models import (
-    MessageEvent, TextMessage, TextSendMessage,
-)
+from linebot.exceptions import InvalidSignatureError
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
 from dotenv import load_dotenv, find_dotenv
 import logging
-
-# 安裝 openai 套件的命令被移除，因為它應該在環境中進行安裝，而非於程式碼中。
 
 # 設置日誌紀錄
 logging.basicConfig(level=logging.INFO)
@@ -42,21 +34,27 @@ def reset_user_count(user_id):
 
 # 呼叫 OpenAI 助手 API
 async def call_openai_assistant_api(user_message):
-    openai.api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
+    openai.api_key = os.getenv('OPENAI_API_KEY')
+
+    logger.info(f"Calling OpenAI with message: {user_message}")
 
     try:
+        # 呼叫 OpenAI 的 Assistant API
         response = await openai.Assistants.create(
-            assistant_id='asst_HVKXE6R3ZcGb6oW6fDEpbdOi',  # 使用指定的助理 ID
-            vector_store_id='vs_O4EC1xmZuHy3WiSlcmklQgsR',  # 使用指定的向量存儲 ID
+            assistant_id='asst_HVKXE6R3ZcGb6oW6fDEpbdOi',
+            vector_store_id='vs_O4EC1xmZuHy3WiSlcmklQgsR',
             messages=[
                 {"role": "user", "content": user_message}
             ]
         )
+
         logger.info(f"Response from OpenAI assistant: {response}")
-        return response['message']['content']  # 根據 API 文檔的格式提取回應內容
+        return response['message']['content']
+
     except openai.error.OpenAIError as e:
         logger.error(f"OpenAI API Error: {e}")
         return "抱歉，我無法處理您的請求，請稍後再試。"
+
     except Exception as e:
         logger.error(f"Unknown error while calling OpenAI assistant: {e}")
         return "系統出現錯誤，請稍後再試。"
@@ -126,6 +124,7 @@ async def handle_callback(request: Request):
 
         # 處理特殊請求（如介紹）
         if "介紹" in user_message or "你是誰" in user_message:
+            logger.info(f"Handling introduction request for user {user_id}")
             await line_bot_api.reply_message(
                 event.reply_token,
                 TextSendMessage(text=introduction_message)
@@ -133,12 +132,17 @@ async def handle_callback(request: Request):
             continue
 
         # 呼叫 OpenAI 助手，並處理可能的錯誤
-        result_text = await call_openai_assistant_api(user_message)
-        
+        try:
+            result_text = await call_openai_assistant_api(user_message)
+        except Exception as e:
+            logger.error(f"Error processing user {user_id} message: {e}")
+            result_text = "處理訊息時發生錯誤，請稍後重試。"
+
         # 更新用戶訊息計數
         user_message_counts[user_id]['count'] += 1
 
         # 回應用戶訊息
+        logger.info(f"Replying to user {user_id} with message: {result_text}")
         await line_bot_api.reply_message(
             event.reply_token,
             TextSendMessage(text=result_text)
