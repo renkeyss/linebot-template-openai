@@ -40,15 +40,16 @@ async def call_openai_assistant_api(user_message):
 
     try:
         # 呼叫 OpenAI 的 Assistant API
-        response = await openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",  # 根據需要替換為您的模型
+        response = await openai.Assistants.create(
+            assistant_id='asst_HVKXE6R3ZcGb6oW6fDEpbdOi',
+            vector_store_id='vs_O4EC1xmZuHy3WiSlcmklQgsR',
             messages=[
                 {"role": "user", "content": user_message}
             ]
         )
 
         logger.info(f"Response from OpenAI assistant: {response}")
-        return response['choices'][0]['message']['content']
+        return response['message']['content']
 
     except openai.error.OpenAIError as e:
         logger.error(f"OpenAI API Error: {e}")
