@@ -4,12 +4,19 @@ import openai
 import os
 import sys
 import aiohttp
+import requests
 from datetime import datetime, timedelta
 from fastapi import Request, FastAPI, HTTPException
-from linebot import AsyncLineBotApi, WebhookParser
+from linebot import (
+    AsyncLineBotApi, WebhookParser
+)
 from linebot.aiohttp_async_http_client import AiohttpAsyncHttpClient
-from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, TextSendMessage
+from linebot.exceptions import (
+    InvalidSignatureError
+)
+from linebot.models import (
+    MessageEvent, TextMessage, TextSendMessage,
+)
 from dotenv import load_dotenv, find_dotenv
 import logging
 
@@ -32,32 +39,23 @@ def reset_user_count(user_id):
         'reset_time': datetime.now() + timedelta(days=1)
     }
 
-# 呼叫 OpenAI 助手 API
-async def call_openai_assistant_api(user_message):
-    openai.api_key = os.getenv('OPENAI_API_KEY')
-
-    logger.info(f"Calling OpenAI with message: {user_message}")
+# 呼叫 OpenAI Chat API
+async def call_openai_chat_api(user_message):
+    openai.api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
 
     try:
-        # 呼叫 OpenAI 的 Assistant API
-        response = await openai.Assistants.create(
-            assistant_id='asst_HVKXE6R3ZcGb6oW6fDEpbdOi',
-            vector_store_id='vs_O4EC1xmZuHy3WiSlcmklQgsR',
+        response = await openai.ChatCompletion.acreate(
+            model="ft:gpt-3.5-turbo-1106:personal:input-20241003-02:AEBhrXwT",  # 使用調整後模型
             messages=[
+                {"role": "system", "content": "你是一個樂於助人的助手，請使用繁體中文回覆。"},
                 {"role": "user", "content": user_message}
             ]
         )
-
-        logger.info(f"Response from OpenAI assistant: {response}")
-        return response['message']['content']
-
-    except openai.error.OpenAIError as e:
-        logger.error(f"OpenAI API Error: {e}")
-        return "抱歉，我無法處理您的請求，請稍後再試。"
-
+        logger.info(f"Response from OpenAI assistant: {response.choices[0]['message']['content']}")
+        return response.choices[0]['message']['content']
     except Exception as e:
-        logger.error(f"Unknown error while calling OpenAI assistant: {e}")
-        return "系統出現錯誤，請稍後再試。"
+        logger.error(f"Error calling OpenAI assistant: {e}")
+        return "Error: 系統出現錯誤，請稍後再試。"
 
 # 獲取 channel_secret 和 channel_access_token
 channel_secret = os.getenv('ChannelSecret', None)
@@ -84,7 +82,7 @@ introduction_message = (
 
 @app.post("/callback")
 async def handle_callback(request: Request):
-    signature = request.headers.get('X-Line-Signature')
+    signature = request.headers['X-Line-Signature']
 
     # get request body as text
     body = await request.body()
@@ -98,7 +96,9 @@ async def handle_callback(request: Request):
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     for event in events:
-        if not isinstance(event, MessageEvent) or not isinstance(event.message, TextMessage):
+        if not isinstance(event, MessageEvent):
+            continue
+        if not isinstance(event.message, TextMessage):
             continue
 
         user_id = event.source.user_id
@@ -124,21 +124,19 @@ async def handle_callback(request: Request):
 
         # 處理特殊請求（如介紹）
         if "介紹" in user_message or "你是誰" in user_message:
-            logger.info(f"Handling introduction request for user {user_id}")
             await line_bot_api.reply_message(
                 event.reply_token,
                 TextSendMessage(text=introduction_message)
             )
             continue
 
-        # 呼叫 OpenAI 助手，並處理可能的錯誤
-        result_text = await call_openai_assistant_api(user_message)
-
+        # 呼叫 OpenAI 助手
+        result_text = await call_openai_chat_api(user_message)
+        
         # 更新用戶訊息計數
         user_message_counts[user_id]['count'] += 1
 
         # 回應用戶訊息
-        logger.info(f"Replying to user {user_id} with message: {result_text}")
         await line_bot_api.reply_message(
             event.reply_token,
             TextSendMessage(text=result_text)
