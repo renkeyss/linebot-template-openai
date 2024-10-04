@@ -40,16 +40,15 @@ async def call_openai_assistant_api(user_message):
 
     try:
         # 呼叫 OpenAI 的 Assistant API
-        response = await openai.Assistants.create(
-            assistant_id='asst_HVKXE6R3ZcGb6oW6fDEpbdOi',
-            vector_store_id='vs_O4EC1xmZuHy3WiSlcmklQgsR',
+        response = await openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",  # 根據需要替換為您的模型
             messages=[
                 {"role": "user", "content": user_message}
             ]
         )
 
         logger.info(f"Response from OpenAI assistant: {response}")
-        return response['message']['content']
+        return response['choices'][0]['message']['content']
 
     except openai.error.OpenAIError as e:
         logger.error(f"OpenAI API Error: {e}")
@@ -132,11 +131,7 @@ async def handle_callback(request: Request):
             continue
 
         # 呼叫 OpenAI 助手，並處理可能的錯誤
-        try:
-            result_text = await call_openai_assistant_api(user_message)
-        except Exception as e:
-            logger.error(f"Error processing user {user_id} message: {e}")
-            result_text = "處理訊息時發生錯誤，請稍後重試。"
+        result_text = await call_openai_assistant_api(user_message)
 
         # 更新用戶訊息計數
         user_message_counts[user_id]['count'] += 1
