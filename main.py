@@ -42,7 +42,7 @@ async def call_openai_chat_api(user_message):
 
     try:
         response = await openai.ChatCompletion.acreate(
-            model="ft:gpt-3.5-turbo-1106:personal:20241004:AEXIWP9h",  # 使用調整後模型
+            model="ft:gpt-3.5-turbo-1106:personal:20241004-01:AEYqnWUU",  # 使用調整後模型
             messages=[
                 {"role": "system", "content": "你是一個樂於助人的助手，請使用繁體中文回覆。"},
                 {"role": "user", "content": user_message}
