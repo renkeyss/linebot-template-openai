@@ -5,6 +5,6 @@ openai==0.28.1
 python-dotenv
 aiohttp
 pinecone[grpc]
-    langchain-pinecone
-    langchain-text-splitters
-    langchain
+langchain-pinecone
+langchain-text-splitters
+langchain
