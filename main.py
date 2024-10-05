@@ -17,8 +17,8 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 讀取環境變數
-_ = load_dotenv(find_dotenv())
+# 讀取環境變數（在本地開發時使用 .env，Heroku 會直接讀取系統變數）
+load_dotenv(find_dotenv())
 
 # Dictionary to store user message counts and reset times
 user_message_counts = {}
