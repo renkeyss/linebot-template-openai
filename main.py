@@ -12,7 +12,6 @@ from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
 from dotenv import load_dotenv, find_dotenv
 import logging
-import time
 
 # 設置日誌紀錄
 logging.basicConfig(level=logging.INFO)
@@ -40,17 +39,16 @@ async def call_openai_assistant_api(user_message):
     logger.info(f"Calling OpenAI with message: {user_message}")
 
     try:
-        # 呼叫 OpenAI 的 Assistant API
-        response = await openai.Assistants.create(
-            assistant_id='asst_HVKXE6R3ZcGb6oW6fDEpbdOi',
-            vector_store_id='vs_O4EC1xmZuHy3WiSlcmklQgsR',
+        # 使用 ChatCompletion API 呼叫
+        response = await openai.ChatCompletion.create(
+            model='gpt-3.5-turbo',  # 或其他可用的模型
             messages=[
                 {"role": "user", "content": user_message}
             ]
         )
 
         logger.info(f"Response from OpenAI assistant: {response}")
-        return response['message']['content']
+        return response['choices'][0]['message']['content']
 
     except openai.error.OpenAIError as e:
         logger.error(f"OpenAI API Error: {e}")
