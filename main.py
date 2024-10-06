@@ -147,7 +147,7 @@ async def handle_callback(request: Request):
             continue
 
         # 處理特殊請求（如介紹）
-        if "你是誰" in user_message or "介紹" in user_message:
+        if "你是誰" in user_message or "你是誰" in user_message:
             await line_bot_api.reply_message(
                 event.reply_token,
                 TextSendMessage(text=introduction_message)
