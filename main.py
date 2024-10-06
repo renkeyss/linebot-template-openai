@@ -34,7 +34,7 @@ user_message_counts = {}
 user_conversations = {}
 
 # User daily limit
-USER_DAILY_LIMIT = 10
+USER_DAILY_LIMIT = 15
 
 # Maximum conversation history length
 MAX_CONVERSATION_LENGTH = 10
