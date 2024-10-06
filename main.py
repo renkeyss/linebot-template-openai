@@ -18,6 +18,7 @@ from linebot.models import (
 )
 from dotenv import load_dotenv, find_dotenv
 import logging
+import numpy as np
 
 # 設置日誌紀錄
 logging.basicConfig(level=logging.INFO)
@@ -38,11 +39,18 @@ USER_DAILY_LIMIT = 10
 # Maximum conversation history length
 MAX_CONVERSATION_LENGTH = 10
 
+# Threshold for topic similarity (越低表示越相似)
+SIMILARITY_THRESHOLD = 0.5
+
 def reset_user_count(user_id):
     user_message_counts[user_id] = {
         'count': 0,
         'reset_time': datetime.now() + timedelta(days=1)
     }
+
+# 計算文本向量的餘弦相似度
+def cosine_similarity(vec1, vec2):
+    return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
 
 # 呼叫 OpenAI Chat API
 async def call_openai_chat_api(conversation_history):
@@ -50,7 +58,7 @@ async def call_openai_chat_api(conversation_history):
 
     try:
         response = await openai.ChatCompletion.acreate(
-            model="ft:gpt-3.5-turbo-1106:personal:20241105:AFCelO98",  # 使用調整後模型
+            model="gpt-3.5-turbo",  # 使用OpenAI的模型
             messages=conversation_history
         )
         assistant_response = response.choices[0]['message']['content']
@@ -59,6 +67,19 @@ async def call_openai_chat_api(conversation_history):
     except Exception as e:
         logger.error(f"Error calling OpenAI assistant: {e}")
         return "抱歉，系統出現錯誤，請稍後再試。"
+
+# 獲取文本的嵌入向量
+async def get_text_embedding(text):
+    try:
+        response = await openai.Embedding.acreate(
+            input=[text],
+            model="text-embedding-ada-002"
+        )
+        embedding = response['data'][0]['embedding']
+        return embedding
+    except Exception as e:
+        logger.error(f"Error getting text embedding: {e}")
+        return None
 
 # 獲取 channel_secret 和 channel_access_token
 channel_secret = os.getenv('ChannelSecret', None)
@@ -135,17 +156,45 @@ async def handle_callback(request: Request):
 
         # 获取用户的对话历史，如果没有则初始化
         conversation_history = user_conversations.get(user_id, [])
-        
+
         # 添加系统消息（如果是新的对话）
         if not conversation_history:
             conversation_history.append({"role": "system", "content": "你是一個樂於助人的助手，請使用繁體中文回覆。"})
 
-        # 添加用户消息到对话历史
-        conversation_history.append({"role": "user", "content": user_message})
+        # 判斷是否離題
+        is_off_topic = False
+        if len(conversation_history) > 1:
+            # 獲取最新一條用戶消息的嵌入向量
+            latest_user_message_embedding = await get_text_embedding(user_message)
+            # 獲取上一輪用戶消息的嵌入向量
+            previous_user_message = None
+            for msg in reversed(conversation_history):
+                if msg['role'] == 'user':
+                    previous_user_message = msg['content']
+                    break
+            if previous_user_message:
+                previous_user_message_embedding = await get_text_embedding(previous_user_message)
+                # 計算相似度
+                if latest_user_message_embedding and previous_user_message_embedding:
+                    similarity = cosine_similarity(latest_user_message_embedding, previous_user_message_embedding)
+                    logger.info(f"Similarity between messages: {similarity}")
+                    if similarity < SIMILARITY_THRESHOLD:
+                        is_off_topic = True
+                        logger.info("Detected off-topic message. Resetting conversation history.")
+
+        if is_off_topic:
+            # 重置對話歷史，只保留系統消息和當前用戶消息
+            conversation_history = [{"role": "system", "content": "你是一個樂於助人的助手，請使用繁體中文回覆。"}]
+            conversation_history.append({"role": "user", "content": user_message})
+        else:
+            # 添加用户消息到对话历史
+            conversation_history.append({"role": "user", "content": user_message})
 
         # 限制对话历史的长度
         if len(conversation_history) > MAX_CONVERSATION_LENGTH:
-            conversation_history = conversation_history[-MAX_CONVERSATION_LENGTH:]
+            # 保留系統消息和最近的對話
+            system_message = conversation_history[0]
+            conversation_history = [system_message] + conversation_history[-(MAX_CONVERSATION_LENGTH - 1):]
 
         # 呼叫 OpenAI 助手
         result_text = await call_openai_chat_api(conversation_history)
