@@ -34,10 +34,10 @@ user_message_counts = {}
 user_conversations = {}
 
 # User daily limit
-USER_DAILY_LIMIT = 10
+USER_DAILY_LIMIT = 8
 
 # Maximum conversation history length
-MAX_CONVERSATION_LENGTH = 10
+MAX_CONVERSATION_LENGTH = 8
 
 # Threshold for topic similarity (越低表示越相似)
 SIMILARITY_THRESHOLD = 0.5
@@ -100,8 +100,8 @@ parser = WebhookParser(channel_secret)
 
 # Introduction message
 introduction_message = (
-    "我是 彰化基督教醫院 內分泌暨新陳代謝科 小助理，如果您有任何關於：糖尿病、高血壓、甲狀腺的相關問題，您可以詢問我。"
-    "但基本上我是由大型語言模型訓練，所以您有任何疑問建議您要向您的醫療團隊做進一步的諮詢，謝謝！"
+    "我是 彰化基督教醫院 內分泌暨新陳代謝科 小助理，如果您有任何關於：糖尿病、高血壓、甲狀腺的相關問題，您可以向我詢問。"
+    "但基本上我是由 OPENAI 大型語言模型訓練，所以當您發現我回覆的答案有誤時，建議您要向您的醫療團隊做進一步的諮詢，謝謝！"
 )
 
 @app.post("/callback")
@@ -142,7 +142,7 @@ async def handle_callback(request: Request):
             logger.info(f"User {user_id} exceeded daily limit")
             await line_bot_api.reply_message(
                 event.reply_token,
-                TextSendMessage(text="您今天的用量已經超過，請明天再詢問。")
+                TextSendMessage(text="您好：您的問題似乎相當多元，但為了讓有限的資源可以讓所有人共享，所以請恕我今天無法再提供回覆，您可明天繼續再次使用本服務，若有急迫性的問題需要瞭解，歡迎致電 04-7238595 分機3239 我們將有專人為您服務，謝謝。")
             )
             continue
 
@@ -159,7 +159,7 @@ async def handle_callback(request: Request):
 
         # 添加系统消息（如果是新的对话）
         if not conversation_history:
-            conversation_history.append({"role": "system", "content": "你是一個樂於助人的助手，請使用繁體中文回覆。"})
+            conversation_history.append({"role": "system", "content": "你是一位專業的內分泌科的專家，回覆問題要有醫療且專業的口吻，並且都要使用繁體中文回覆。"})
 
         # 判斷是否離題
         is_off_topic = False
@@ -184,7 +184,7 @@ async def handle_callback(request: Request):
 
         if is_off_topic:
             # 重置對話歷史，只保留系統消息和當前用戶消息
-            conversation_history = [{"role": "system", "content": "你是一個樂於助人的助手，請使用繁體中文回覆。"}]
+            conversation_history = [{"role": "system", "content": "你是一位專業的內分泌科的專家，回覆問題要有醫療且專業的口吻，並且都要使用繁體中文回覆。"}]
             conversation_history.append({"role": "user", "content": user_message})
         else:
             # 添加用户消息到对话历史
