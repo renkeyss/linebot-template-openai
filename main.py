@@ -58,7 +58,7 @@ async def call_openai_chat_api(conversation_history):
 
     try:
         response = await openai.ChatCompletion.acreate(
-            model="gpt-3.5-turbo",  # 使用OpenAI的模型
+            model="ft:gpt-3.5-turbo-1106:personal:20241105:AFCelO98",  # 使用OpenAI的模型
             messages=conversation_history
         )
         assistant_response = response.choices[0]['message']['content']
