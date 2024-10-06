@@ -4,7 +4,6 @@ import openai
 import os
 import sys
 import aiohttp
-import requests
 from datetime import datetime, timedelta
 from fastapi import Request, FastAPI, HTTPException
 from linebot import (
@@ -30,8 +29,14 @@ _ = load_dotenv(find_dotenv())
 # Dictionary to store user message counts and reset times
 user_message_counts = {}
 
+# Dictionary to store conversation history per user
+user_conversations = {}
+
 # User daily limit
 USER_DAILY_LIMIT = 10
+
+# Maximum conversation history length
+MAX_CONVERSATION_LENGTH = 10
 
 def reset_user_count(user_id):
     user_message_counts[user_id] = {
@@ -40,22 +45,20 @@ def reset_user_count(user_id):
     }
 
 # 呼叫 OpenAI Chat API
-async def call_openai_chat_api(user_message):
+async def call_openai_chat_api(conversation_history):
     openai.api_key = os.getenv('OPENAI_API_KEY')  # 確保使用環境變數中正確的 API key
 
     try:
         response = await openai.ChatCompletion.acreate(
             model="ft:gpt-3.5-turbo-1106:personal:20241105:AFCelO98",  # 使用調整後模型
-            messages=[
-                {"role": "system", "content": "你是一個樂於助人的助手，請使用繁體中文回覆。"},
-                {"role": "user", "content": user_message}
-            ]
+            messages=conversation_history
         )
-        logger.info(f"Response from OpenAI assistant: {response.choices[0]['message']['content']}")
-        return response.choices[0]['message']['content']
+        assistant_response = response.choices[0]['message']['content']
+        logger.info(f"Response from OpenAI assistant: {assistant_response}")
+        return assistant_response
     except Exception as e:
         logger.error(f"Error calling OpenAI assistant: {e}")
-        return "Error: 系統出現錯誤，請稍後再試。"
+        return "抱歉，系統出現錯誤，請稍後再試。"
 
 # 獲取 channel_secret 和 channel_access_token
 channel_secret = os.getenv('ChannelSecret', None)
@@ -123,16 +126,36 @@ async def handle_callback(request: Request):
             continue
 
         # 處理特殊請求（如介紹）
-        if "你是誰" in user_message or "你是誰" in user_message:
+        if "你是誰" in user_message or "介紹" in user_message:
             await line_bot_api.reply_message(
                 event.reply_token,
                 TextSendMessage(text=introduction_message)
             )
             continue
 
-        # 呼叫 OpenAI 助手
-        result_text = await call_openai_chat_api(user_message)
+        # 获取用户的对话历史，如果没有则初始化
+        conversation_history = user_conversations.get(user_id, [])
         
+        # 添加系统消息（如果是新的对话）
+        if not conversation_history:
+            conversation_history.append({"role": "system", "content": "你是一個樂於助人的助手，請使用繁體中文回覆。"})
+
+        # 添加用户消息到对话历史
+        conversation_history.append({"role": "user", "content": user_message})
+
+        # 限制对话历史的长度
+        if len(conversation_history) > MAX_CONVERSATION_LENGTH:
+            conversation_history = conversation_history[-MAX_CONVERSATION_LENGTH:]
+
+        # 呼叫 OpenAI 助手
+        result_text = await call_openai_chat_api(conversation_history)
+
+        # 添加助手的回复到对话历史
+        conversation_history.append({"role": "assistant", "content": result_text})
+
+        # 更新用户的对话历史
+        user_conversations[user_id] = conversation_history
+
         # 更新用戶訊息計數
         user_message_counts[user_id]['count'] += 1
 
